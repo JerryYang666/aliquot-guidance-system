@@ -27,6 +27,7 @@ describe.skipIf(!url)("pipeline against Postgres", () => {
       createJob: await import("@/lib/server/create-job"),
       jobs: await import("@/lib/server/jobs"),
       participants: await import("@/lib/server/participants"),
+      tokens: await import("@/lib/server/tokens"),
       errors: await import("@/lib/server/errors"),
     };
   }
@@ -68,6 +69,22 @@ describe.skipIf(!url)("pipeline against Postgres", () => {
                 sourceBox: "AIP Box 4",
                 sourceLocation: "2nd shelf",
                 sourcePosition: "4-B-15",
+                slot: "A1",
+                volumeNote: null,
+              },
+            ],
+          },
+          {
+            number: 3,
+            boxNumber: 3,
+            samples: [
+              {
+                pullOrder: 1,
+                newId: "S0201",
+                originalId: "60000",
+                sourceBox: "AIP Box 5",
+                sourceLocation: "2nd shelf",
+                sourcePosition: "5-A-1",
                 slot: "A1",
                 volumeNote: null,
               },
@@ -188,6 +205,11 @@ describe.skipIf(!url)("pipeline against Postgres", () => {
   });
 
   it("logs rejected scans, including ones from another batch", async () => {
+    // With a source tube of batch 1 out, a tube of batch 2 is the wrong one.
+    await act("puller", {
+      type: "pull",
+      sampleId: (await sample("S0003")).id,
+    });
     const r = await act("aliquoter", {
       type: "scan",
       label: "S0101-1",
@@ -280,6 +302,143 @@ describe.skipIf(!url)("pipeline against Postgres", () => {
       "Lee",
       "Lee",
     ]);
+  });
+
+  it("lets an Aliquoter work a batch alone, starting each sample with a scan", async () => {
+    // Nobody pulls or labels batch 2: its Aliquoter does it all and only
+    // scans. With no sample under way, the first scan starts one and
+    // records it as pulled and labeled; its other tubes finish it.
+    const db = mod.db.getDb();
+    const job = await mod.jobs.getJobByCode(db, code);
+    const sol = await mod.participants.joinJob(
+      db,
+      job.id,
+      { name: "Sol", role: "aliquoter", batchNumber: 2 },
+      "vitest",
+    );
+    const scan = (label: string, currentSampleId: string | null) =>
+      mod.actions.performAction(db, sol.participant, {
+        clientActionId: actionId(),
+        clientAt: new Date().toISOString(),
+        action: { type: "scan", label, currentSampleId },
+      });
+    const s = await sample("S0101");
+    expect(s.pulledAt).toBeNull();
+    expect(s.labeledAt).toBeNull();
+
+    const first = await scan("S0101-2", null);
+    expect(first.scan).toMatchObject({
+      kind: "place",
+      destination: { set: "Keep2", box: 2, slot: "A1" },
+      sampleFinished: false,
+    });
+    expect(first.events.map((e) => [e.type, e.data])).toEqual([
+      ["sample_pulled", { impliedByScan: true }],
+      ["sample_labeled", { impliedByScan: true }],
+      ["tube_placed", expect.objectContaining({ label: "S0101-2" })],
+    ]);
+
+    // The sample is now the screen's current one, so its other tubes go
+    // in, and the last one finishes it.
+    expect((await scan("S0101-1", s.id)).scan).toMatchObject({
+      kind: "place",
+      sampleFinished: false,
+    });
+    const last = await scan("S0101-3", s.id);
+    expect(last.scan).toMatchObject({
+      kind: "place",
+      destination: { set: "Keep3", box: 2, slot: "A1" },
+      sampleFinished: true,
+    });
+
+    const done = await sample("S0101");
+    expect([done.pulledBy, done.labeledBy, done.finishedBy]).toEqual([
+      "Sol",
+      "Sol",
+      "Sol",
+    ]);
+    expect(done.tubes.map((t) => t.status)).toEqual([
+      "placed",
+      "placed",
+      "placed",
+    ]);
+    await mod.participants.leaveJob(db, sol.participant);
+  });
+
+  it("moves an Aliquoter with nothing out to the batch of the tube they scan", async () => {
+    const db = mod.db.getDb();
+    const job = await mod.jobs.getJobByCode(db, code);
+    const mo = await mod.participants.joinJob(
+      db,
+      job.id,
+      { name: "Mo", role: "aliquoter", batchNumber: 2 },
+      "vitest",
+    );
+    const scan = (
+      who: typeof mo.participant,
+      label: string,
+      currentSampleId: string | null = null,
+      clientActionId = actionId(),
+    ) =>
+      mod.actions.performAction(db, who, {
+        clientActionId,
+        clientAt: new Date().toISOString(),
+        action: { type: "scan", label, currentSampleId },
+      });
+
+    // Batch 2 has nothing out. Ali is the Aliquoter on batch 1, so Mo
+    // cannot move there.
+    const held = await scan(mo.participant, "S0003-1");
+    expect(held.scan).toMatchObject({ kind: "reject", reason: "batch_held" });
+    expect(held.moved).toBeUndefined();
+
+    // Nobody is on batch 3: Mo's scan of its tube moves the station there,
+    // and places the tube as if it had been on batch 3 all along.
+    const id = actionId();
+    const first = await scan(mo.participant, "S0201-1", null, id);
+    expect(first.scan).toMatchObject({
+      kind: "place",
+      destination: { set: "Ship", box: 3, slot: "A1" },
+    });
+    expect(first.events.map((e) => [e.type, e.batchNumber, e.data])).toEqual([
+      ["participant_moved", 2, { to: 3, label: "S0201-1" }],
+      ["sample_pulled", 3, { impliedByScan: true }],
+      ["sample_labeled", 3, { impliedByScan: true }],
+      ["tube_placed", 3, expect.objectContaining({ label: "S0201-1" })],
+    ]);
+    expect(first.moved?.me).toEqual({
+      participantId: mo.participant.participantId,
+      name: "Mo",
+      role: "aliquoter",
+      batchNumber: 3,
+    });
+    const there = await mod.tokens.verifyParticipantToken(first.moved!.token);
+    expect(there).toEqual({ ...mo.participant, batchNumber: 3 });
+    const online = await mod.jobs.onlineParticipants(db, job.id);
+    expect(online.find((p) => p.name === "Mo")).toMatchObject({
+      batchNumber: 3,
+      waiting: false,
+    });
+
+    // A retry that lost its answer moves the station all the same.
+    const retry = await scan(mo.participant, "S0201-1", null, id);
+    expect(retry).toMatchObject({
+      duplicate: true,
+      moved: { me: first.moved?.me },
+    });
+    expect(await mod.tokens.verifyParticipantToken(retry.moved!.token)).toEqual(
+      there,
+    );
+
+    // On batch 3, S0201 is out: a tube of another batch is wrong again.
+    const s = await sample("S0201");
+    const wrong = await scan(there, "S0002-1", s.id);
+    expect(wrong.scan).toMatchObject({ kind: "reject", reason: "other_batch" });
+    expect(wrong.moved).toBeUndefined();
+    expect((await scan(there, "S0201-2", s.id)).scan).toMatchObject({
+      kind: "place",
+    });
+    await mod.participants.leaveJob(db, there);
   });
 
   it("lets one person hold each working role on a batch while others wait", async () => {

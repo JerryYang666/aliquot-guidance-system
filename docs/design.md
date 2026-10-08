@@ -29,6 +29,17 @@ touch the screen during normal flow; buttons exist for exceptions.
 
 One person can work several roles by opening one browser tab per role.
 
+**Working alone.** One person can also do a batch alone, as its Aliquoter
+and nothing else: they pull each source tube and stick on its labels
+themselves, then only scan. The Aliquoter is the last step, so a scan
+stands for the steps before it. With no sample under way, the first scan of
+any tube in the batch starts that sample and records it as pulled and
+labeled, logged as implied by the scan (see
+[What a scan does](#what-a-scan-does)). The screen shows the tube's box and
+slot, and the sample's other tubes finish it. Returning the source tube is
+still the Puller's to confirm, so working alone, finished samples stay on
+the return list.
+
 ## Jobs, codes, and identity — no accounts
 
 The home page offers **Create a job** or **Join a job**. Operators have no
@@ -90,12 +101,29 @@ The scanned text must be `<new ID>-<1|2|3>` for a sample in this job.
 | Label belongs to the aliquoter's current sample                                | **Accepted**: tube placed; screen shows e.g. `KEEP2 · box 1 · G6`. Third tube finishes the sample and the screen advances to the next ready sample. |
 | Aliquoter has no current sample (waiting) and the label's sample is unfinished | **Accepted**, and the sample becomes current. If it was not marked pulled/labeled, that is recorded as implied by the scan.                         |
 | Label belongs to a different sample                                            | **Rejected** — red screen, error tone, message naming both samples. Logged.                                                                         |
-| Unknown label, or a sample in another batch                                    | **Rejected** and logged.                                                                                                                            |
+| Unknown label                                                                  | **Rejected** and logged.                                                                                                                            |
+
+A tube of **another batch** depends on what the aliquoter's screen shows:
+
+| Situation                                                                                  | Result                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A source tube of this batch is out (pulled, not finished): the screen shows an original ID | **Rejected**: red, error tone, names both batches. Logged.                                                                                                                                               |
+| No source tube of this batch is out, so nothing on the screen to check the tube against    | **Accepted** as if the station were on that batch and waiting, and the station **moves** there at once. A warning pop-up (amber, gone after 4 s) says the tube goes in that batch's box, not this one's. |
+| As above, but someone else is that batch's Aliquoter                                       | **Rejected** (red), naming them. Logged.                                                                                                                                                                 |
+| As above, but the tube is already placed                                                   | Shows its destination again; the station stays.                                                                                                                                                          |
+
+Moving is logged (`participant_moved`, from and to which batch, by which
+label) in the same transaction as the placement. Like joining the batch, the
+station takes its place in line for the role from then (see
+[Real-time sync](#real-time-sync)), and the screen carries on with a new
+token for that batch. Only an Aliquoter moves; a Labeler's scan of another
+batch's tube is always rejected.
 
 The phone computes the destination locally from its synced state and shows it
 instantly; the server's answer (normally within a few hundred ms) confirms or
-overturns it. Identical decodes are debounced for 2.5 s so a tube held in
-front of the camera is not logged repeatedly.
+overturns it. A tube of another batch is not in the phone's state, so for it
+the screen waits for the server. Identical decodes are debounced for 2.5 s so
+a tube held in front of the camera is not logged repeatedly.
 
 ### Labeler scans (optional)
 
@@ -173,7 +201,7 @@ outcome instead of acting twice, so flaky phone connections can't
 double-log.
 
 Logged event types: `job_created`, `participant_joined`, `participant_left`,
-`sample_pulled`, `sample_labeled`, `sample_skipped`, `label_scanned`,
+`participant_moved`, `sample_pulled`, `sample_labeled`, `sample_skipped`, `label_scanned`,
 `label_scan_repeated`, `label_scan_rejected`, `tube_placed`,
 `scan_repeated`, `scan_rejected`, `sample_finished`, `sample_returned`,
 `note_added`, and an `*_undone` / `sample_reopened` entry for each reversal.

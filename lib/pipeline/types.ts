@@ -91,6 +91,7 @@ export type EventType =
   | "job_reopened"
   | "participant_joined"
   | "participant_left"
+  | "participant_moved"
   | "sample_pulled"
   | "sample_pull_undone"
   | "sample_labeled"

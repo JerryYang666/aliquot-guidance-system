@@ -70,6 +70,13 @@ function useSync<
     versionRef.current = state.version;
   }, [state.version]);
 
+  // A station that moves to another batch gets a new token. A snapshot
+  // fetch queued behind one already running must use it, not the old one.
+  const tokenRef = useRef(token);
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
+
   const inFlight = useRef<Promise<void> | null>(null);
   const again = useRef(false);
 
@@ -96,7 +103,9 @@ function useSync<
       do {
         again.current = false;
         try {
-          const snapshot = await api<S>(`${base}/state`, { token });
+          const snapshot = await api<S>(`${base}/state`, {
+            token: tokenRef.current,
+          });
           seenAt.current = snapshot.seenAt ?? seenAt.current;
           dispatch({ type: "snapshot", snapshot });
           setOnline(snapshot.online);
@@ -108,7 +117,7 @@ function useSync<
     };
     inFlight.current = run();
     return inFlight.current;
-  }, [base, token, ready, fail]);
+  }, [base, ready, fail]);
 
   const applyResponse = useCallback((response: ActionResponse) => {
     if (response.duplicate) return;
@@ -140,7 +149,8 @@ function useSync<
     }
   }, [base, source, token, ready, fail]);
 
-  // Initial load, and again whenever the tab comes back (phones sleep).
+  // Initial load, and again whenever the tab comes back (phones sleep) or
+  // the station moves to another batch (a new token).
   useEffect(() => {
     if (!ready) return;
     void refresh();
@@ -149,7 +159,7 @@ function useSync<
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [ready, refresh]);
+  }, [ready, refresh, token]);
 
   // A station says goodbye as its page goes (tab closed, reload, another
   // site), so its role is free at once and not after a silence. A beacon

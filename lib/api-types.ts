@@ -105,6 +105,11 @@ export interface ActionResponse {
   scan?: ScanOutcome;
   labelScan?: LabelScanOutcome;
   duplicate?: boolean;
+  /**
+   * Set when a scan moved this station to another batch: the session to
+   * carry on with there. Only the station that scanned receives it.
+   */
+  moved?: { token: string; me: Me };
 }
 
 /** What a station's heartbeat answers. */

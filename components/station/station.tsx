@@ -10,6 +10,7 @@ import { unlockAudio } from "@/lib/client/feedback";
 import {
   clearSession,
   parseSession,
+  saveSession,
   useStoredSessionRaw,
 } from "@/lib/client/session";
 import { useActions } from "@/lib/client/use-actions";
@@ -64,15 +65,32 @@ export function Station({ code }: { code: string }) {
     if (raw === null) router.replace(`/j/${code}`);
   }, [raw, code, router]);
 
+  const fromBox = sync.snapshot?.batch.boxNumber;
   const perform = useCallback(
     async (action: Action) => {
       const result = await run(action);
       // Scan failures are shown in the station's own result banner.
       const isScan = action.type === "scan" || action.type === "label_scan";
       if (!result.ok && !isScan) notify(result.error.message, "error");
+      // An Aliquoter with no tube on their screen scanned a tube of another
+      // batch. The station moves there at once and loads it with the new
+      // session. The tube is placed, so this is a warning, not an error:
+      // its box is another batch's, easy to miss for one's usual box.
+      const moved = result.ok ? result.response.moved : undefined;
+      if (moved) {
+        saveSession(code, moved);
+        const scan = result.ok ? result.response.scan : undefined;
+        const to = moved.me.batchNumber;
+        notify(
+          scan?.kind === "place"
+            ? `Different box! ${scan.label} is from batch ${to}: it goes in ${scan.destination.set} box ${scan.destination.box}${fromBox === undefined ? "" : `, not box ${fromBox}`}. This screen is now on batch ${to}.`
+            : `This screen is now on batch ${to}.`,
+          "warning",
+        );
+      }
       return result;
     },
-    [run, notify],
+    [run, notify, code, fromBox],
   );
 
   // A batch has one Puller, one Labeler and one Aliquoter at work. If

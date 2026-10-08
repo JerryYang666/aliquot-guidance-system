@@ -309,12 +309,18 @@ export function applySampleAction(
 }
 
 export type ScanRejectReason =
-  "unreadable" | "unknown" | "bad_tube" | "other_batch" | "wrong_sample";
+  | "unreadable"
+  | "unknown"
+  | "bad_tube"
+  | "other_batch"
+  | "batch_held"
+  | "wrong_sample";
 
 export type ScanDecision =
   | { kind: "reject"; reason: ScanRejectReason; message: string }
   | { kind: "repeat"; sample: Sample; tube: number }
-  | { kind: "place"; sample: Sample; tube: number };
+  /** `moveTo`: the batch the station moves to, for a tube of another batch. */
+  | { kind: "place"; sample: Sample; tube: number; moveTo?: number };
 
 export interface ScanInput {
   label: string;
@@ -325,13 +331,22 @@ export interface ScanInput {
   currentSample: Sample | null;
   batchNumber: number;
   destCount: number;
+  /**
+   * True for an Aliquoter with no source tube of their batch out (pulled,
+   * not finished): their screen shows no tube to check a label against, so
+   * a tube of another batch may move the station there.
+   */
+  mayMove?: boolean;
+  /** Who else is the Aliquoter on the label's batch, when it is another batch. */
+  heldBy?: string | null;
 }
 
-type LabelCheck =
-  | { kind: "reject"; reason: ScanRejectReason; message: string }
-  | { kind: "ok"; sample: Sample; tube: number; text: string };
+type Reject = { kind: "reject"; reason: ScanRejectReason; message: string };
 
-/** What every scan must pass, at either station: a readable label for a tube of a sample in this batch. */
+type LabelCheck =
+  Reject | { kind: "ok"; sample: Sample; tube: number; text: string };
+
+/** What every scan must pass, at either station: a readable label for a tube of a sample in this job. */
 function checkLabel(input: ScanInput): LabelCheck {
   const { parsed, labelSample } = input;
   const text = normalizeLabel(input.label);
@@ -353,13 +368,40 @@ function checkLabel(input: ScanInput): LabelCheck {
       reason: "bad_tube",
       message: `${text}: samples only have ${input.destCount} tubes.`,
     };
-  if (labelSample.batchNumber !== input.batchNumber)
+  return { kind: "ok", sample: labelSample, tube: parsed.tube, text };
+}
+
+function otherBatch(input: ScanInput, sample: Sample, text: string): Reject {
+  return {
+    kind: "reject",
+    reason: "other_batch",
+    message: `${text} belongs to batch ${sample.batchNumber}; this screen is on batch ${input.batchNumber}.`,
+  };
+}
+
+/**
+ * An Aliquoter's scan of a tube from another batch. With a source tube of
+ * their own batch out, their screen says which tube to expect, and this is
+ * the wrong one. With none, nothing says it is wrong: the station moves to
+ * the tube's batch and takes the tube, as it would one of its own while
+ * waiting, unless someone else is the Aliquoter there.
+ */
+function decideOtherBatch(
+  input: ScanInput,
+  sample: Sample,
+  tube: number,
+  text: string,
+): ScanDecision {
+  if (!input.mayMove) return otherBatch(input, sample, text);
+  if (sample.tubes[tube - 1]?.status === "placed")
+    return { kind: "repeat", sample, tube };
+  if (input.heldBy)
     return {
       kind: "reject",
-      reason: "other_batch",
-      message: `${text} belongs to batch ${labelSample.batchNumber}; this screen is on batch ${input.batchNumber}.`,
+      reason: "batch_held",
+      message: `${text} belongs to batch ${sample.batchNumber}, where ${input.heldBy} is the Aliquoter.`,
     };
-  return { kind: "ok", sample: labelSample, tube: parsed.tube, text };
+  return { kind: "place", sample, tube, moveTo: sample.batchNumber };
 }
 
 /** The aliquoter's scan rules from docs/design.md ("What a scan does"). */
@@ -367,6 +409,8 @@ export function decideScan(input: ScanInput): ScanDecision {
   const check = checkLabel(input);
   if (check.kind === "reject") return check;
   const { sample, tube, text } = check;
+  if (sample.batchNumber !== input.batchNumber)
+    return decideOtherBatch(input, sample, tube, text);
   const { currentSample } = input;
   if (sample.tubes[tube - 1]?.status === "placed")
     return { kind: "repeat", sample, tube };
@@ -397,6 +441,8 @@ export function decideLabelScan(input: ScanInput): LabelScanDecision {
   const check = checkLabel(input);
   if (check.kind === "reject") return check;
   const { sample, tube, text } = check;
+  if (sample.batchNumber !== input.batchNumber)
+    return otherBatch(input, sample, text);
   const { currentSample } = input;
   if (sample.tubes[tube - 1]?.labelScannedAt)
     return { kind: "repeat", sample, tube };
