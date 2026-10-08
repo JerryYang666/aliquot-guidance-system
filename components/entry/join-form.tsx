@@ -1,6 +1,5 @@
 "use client";
 
-import { Beaker, Eye, PackageOpen, Tag } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -16,21 +15,20 @@ import {
 import { formatJobCode } from "@/lib/job-code";
 import { ROLE_LABELS, type Role } from "@/lib/pipeline/types";
 
+import { ROLE_ICONS } from "../role-icons";
 import { Button, Card, cx, Label } from "../ui";
 
-const ROLE_INFO: { role: Role; icon: typeof Beaker; text: string }[] = [
+const ROLE_INFO: { role: Role; text: string }[] = [
   {
     role: "puller",
-    icon: PackageOpen,
     text: "Takes source tubes from the freezer and returns them.",
   },
-  { role: "labeler", icon: Tag, text: "Sticks the three labels on new tubes." },
+  { role: "labeler", text: "Sticks the three labels on new tubes." },
   {
     role: "aliquoter",
-    icon: Beaker,
     text: "Pipettes, then scans each new tube with the camera.",
   },
-  { role: "overview", icon: Eye, text: "Watches progress and fixes mistakes." },
+  { role: "overview", text: "Watches progress and fixes mistakes." },
 ];
 
 export function JoinForm({ code }: { code: string }) {
@@ -172,26 +170,29 @@ export function JoinForm({ code }: { code: string }) {
       <Card className="flex flex-col gap-2">
         <Label>Your role</Label>
         <div className="grid gap-2 sm:grid-cols-2">
-          {ROLE_INFO.map(({ role: r, icon: Icon, text }) => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => setRole(r)}
-              aria-pressed={role === r}
-              className={cx(
-                "flex items-start gap-3 rounded-xl p-4 text-left ring-1",
-                role === r
-                  ? "bg-slate-900 text-white ring-slate-900"
-                  : "bg-white ring-slate-200 hover:ring-slate-400",
-              )}
-            >
-              <Icon className="mt-0.5 size-6 shrink-0" />
-              <span>
-                <span className="block font-semibold">{ROLE_LABELS[r]}</span>
-                <span className="text-sm opacity-80">{text}</span>
-              </span>
-            </button>
-          ))}
+          {ROLE_INFO.map(({ role: r, text }) => {
+            const Icon = ROLE_ICONS[r];
+            return (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRole(r)}
+                aria-pressed={role === r}
+                className={cx(
+                  "flex items-start gap-3 rounded-xl p-4 text-left ring-1",
+                  role === r
+                    ? "bg-slate-900 text-white ring-slate-900"
+                    : "bg-white ring-slate-200 hover:ring-slate-400",
+                )}
+              >
+                <Icon className="mt-0.5 size-6 shrink-0" />
+                <span>
+                  <span className="block font-semibold">{ROLE_LABELS[r]}</span>
+                  <span className="text-sm opacity-80">{text}</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
       </Card>
 

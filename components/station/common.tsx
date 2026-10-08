@@ -32,6 +32,7 @@ import {
 } from "@/lib/pipeline/queue";
 import { ROLE_LABELS, type LogEvent, type Sample } from "@/lib/pipeline/types";
 
+import { ROLE_ICONS } from "../role-icons";
 import { Badge, cx } from "../ui";
 
 export function ConnectionPill({ connection }: { connection: Connection }) {
@@ -106,30 +107,32 @@ export function StationHeader({
   const exportUrl = (format: string) =>
     `/api/jobs/${job.code}/export?format=${format}&t=${encodeURIComponent(token)}`;
 
+  const RoleIcon = ROLE_ICONS[me.role];
+
+  // The role is the largest thing in the header: it is what tells one
+  // station's screen from another's. On a phone the batch, name and job
+  // drop to a line of their own below it.
   return (
     <header className="sticky top-0 z-30 bg-slate-900 text-white">
-      <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2">
-            <span className="truncate font-semibold">{job.name}</span>
-            <span className="hidden font-mono text-xs text-slate-400 sm:inline">
-              {formatJobCode(job.code)}
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-2 text-sm text-slate-300">
-            <span className="font-semibold text-white">
-              {ROLE_LABELS[me.role]}
-            </span>
-            <span>·</span>
-            <span>
-              Batch {batch.number}
-              <span className="text-slate-400"> (box {batch.boxNumber})</span>
-            </span>
-            <span>·</span>
-            <span className="truncate">{me.name}</span>
-          </div>
+      <div className="mx-auto grid max-w-7xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-2">
+        <span className="flex size-9 items-center justify-center rounded-lg bg-white text-slate-900 sm:row-span-2 sm:size-12 sm:rounded-xl">
+          <RoleIcon className="size-5 sm:size-7" />
+        </span>
+        <div className="truncate text-2xl leading-tight font-bold tracking-tight sm:text-3xl">
+          {ROLE_LABELS[me.role]}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="col-span-3 row-start-2 mt-1 truncate text-sm text-slate-300 sm:col-span-1 sm:col-start-2 sm:mt-0">
+          <span className="font-semibold text-white">Batch {batch.number}</span>
+          <span className="text-slate-400"> (box {batch.boxNumber})</span>
+          {" · "}
+          {me.name}
+          {" · "}
+          {job.name}
+          <span className="ml-2 hidden font-mono text-xs text-slate-400 sm:inline">
+            {formatJobCode(job.code)}
+          </span>
+        </div>
+        <div className="col-start-3 row-start-1 flex items-center gap-3 sm:row-span-2">
           <ConnectionPill connection={connection} />
           <WakePill state={wake} />
           <div className="relative">
