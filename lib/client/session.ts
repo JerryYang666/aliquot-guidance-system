@@ -8,6 +8,8 @@ import { useSyncExternalStore } from "react";
 
 import type { Me } from "@/lib/api-types";
 
+import { LANGUAGES, type Language } from "./instructions";
+
 export interface Session {
   token: string;
   me: Me;
@@ -15,6 +17,7 @@ export interface Session {
 
 const sessionKey = (code: string) => `ags:session:${code}`;
 const NAME_KEY = "ags:name";
+const LANGUAGE_KEY = "ags:language";
 
 function read(storage: () => Storage, key: string): string | null {
   try {
@@ -62,6 +65,16 @@ export function parseSession(raw: string | null | undefined): Session | null {
 
 export function rememberedName(): string {
   return read(device, NAME_KEY) ?? "";
+}
+
+/** The language this device last read the instructions in; English until one is chosen. */
+export function rememberedLanguage(): Language {
+  const stored = read(device, LANGUAGE_KEY);
+  return LANGUAGES.find((l) => l === stored) ?? "en";
+}
+
+export function rememberLanguage(language: Language) {
+  write(device, LANGUAGE_KEY, language);
 }
 
 // Lets components re-read the session when this tab saves or clears it.

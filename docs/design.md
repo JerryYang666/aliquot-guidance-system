@@ -44,7 +44,10 @@ accounts; only admins sign in (see [Admins](#admins)).
   23⁸ ≈ 7.8·10¹⁰ codes make guessing impractical; the code is the only
   gate, by design.
 - **Join**: enter the code, your **name**, the **batch**, and a **role**
-  (Puller, Labeler, Aliquoter, or Overview). A batch has one Puller, one
+  (Puller, Labeler, Aliquoter, or Overview). Pressing Start first shows the
+  role's instructions, a few plain steps, every time: in English, or in
+  Chinese at the tap of a button (the device remembers which). Start stays
+  off for 3 seconds so they are read. A batch has one Puller, one
   Labeler and one Aliquoter at work at a time. Nobody is turned away: the
   join screen says who has a role, and someone who joins it anyway waits.
   Their station is locked, says who has the role and to ask them to leave,

@@ -9,11 +9,14 @@ export function Modal({
   onClose,
   children,
   footer,
+  headerAction,
 }: {
   title: ReactNode;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  /** Shown at the top right, beside the close button. */
+  headerAction?: ReactNode;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -38,14 +41,17 @@ export function Modal({
       >
         <header className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-3">
           <h2 className="text-lg font-semibold">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"
-          >
-            <X className="size-5" />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {headerAction}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
         </header>
         <div className="overflow-y-auto px-5 py-4">{children}</div>
         {footer && (

@@ -21,6 +21,8 @@ import { JoinQrDialog } from "../join-qr";
 import { ROLE_ICONS } from "../role-icons";
 import { Button, Card, cx, Label } from "../ui";
 
+import { RoleInstructions } from "./role-instructions";
+
 const ROLE_INFO: { role: Role; text: string }[] = [
   {
     role: "puller",
@@ -48,6 +50,7 @@ export function JoinForm({ code }: { code: string }) {
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
+  const [reading, setReading] = useState(false);
 
   // The job, and again every few seconds: which roles are free changes as
   // people come and go.
@@ -88,8 +91,15 @@ export function JoinForm({ code }: { code: string }) {
   );
   const chosenBatch = batch ?? firstOpen ?? null;
 
-  const join = async (e: FormEvent) => {
+  // Start opens the role's instructions; joining happens from there.
+  const readFirst = (e: FormEvent) => {
     e.preventDefault();
+    if (!role || !chosenBatch || !name.trim()) return;
+    setError(null);
+    setReading(true);
+  };
+
+  const join = async () => {
     if (!role || !chosenBatch || !name.trim()) return;
     setJoining(true);
     setError(null);
@@ -115,6 +125,7 @@ export function JoinForm({ code }: { code: string }) {
     } catch (e) {
       setError(e instanceof ApiFailure ? e.message : "Could not join.");
       setJoining(false);
+      setReading(false);
     }
   };
 
@@ -146,7 +157,7 @@ export function JoinForm({ code }: { code: string }) {
         );
 
   return (
-    <form onSubmit={join} className="flex flex-col gap-5">
+    <form onSubmit={readFirst} className="flex flex-col gap-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="font-mono text-sm text-slate-500">
@@ -159,6 +170,14 @@ export function JoinForm({ code }: { code: string }) {
         </Button>
       </div>
       {qrOpen && <JoinQrDialog code={code} onClose={() => setQrOpen(false)} />}
+      {reading && role && (
+        <RoleInstructions
+          role={role}
+          joining={joining}
+          onStart={() => void join()}
+          onClose={() => setReading(false)}
+        />
+      )}
 
       {existing && (
         <Card className="flex items-center justify-between gap-3 bg-emerald-50 ring-emerald-200">
@@ -266,7 +285,7 @@ export function JoinForm({ code }: { code: string }) {
         size="xl"
         disabled={joining || !role || !name.trim() || !chosenBatch}
       >
-        {joining ? "Joining…" : "Start"}
+        Start
       </Button>
     </form>
   );
