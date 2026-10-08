@@ -78,11 +78,13 @@ were skipped.
 - **Puller's next** = first sample in queue order not yet pulled.
 - **Labeler's next** = first sample in queue order not yet labeled.
 - **Aliquoter's ready list** = samples that are pulled **and** labeled but
-  not yet finished, in queue order. The aliquoter's current sample is the head
-  of that list unless they tap another one. A source tube can reach the
-  aliquoter before its labels are on, so the screen also lists the samples
-  that are pulled but not yet labeled, by original ID, and shows the first
-  of them large when nothing is ready.
+  not yet finished, in queue order. A source tube can reach the aliquoter
+  before its labels are on, so the screen also lists the samples that are
+  pulled but not yet labeled, by original ID. The aliquoter's current sample
+  is the head of the ready list, or with nothing ready the first pulled one,
+  unless they tap another one. It is the source tube on the screen, which
+  every scan is checked against; there is none only when no source tube of
+  the batch is out (pulled, not finished).
 - **Return list** (puller) = finished samples not yet returned, oldest first.
 
 Each sample has three tubes, each `pending`, `placed`, or `not_filled`. The
@@ -96,13 +98,18 @@ spills; what to do is the operator's call, and they can add a note).
 
 The scanned text must be `<new ID>-<1|2|3>` for a sample in this job.
 
-| Situation                                                                      | Result                                                                                                                                                                                                                           |
-| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tube already placed                                                            | Shows its destination again (logged as a repeat).                                                                                                                                                                                |
-| Label belongs to the aliquoter's current sample                                | **Accepted**: the tube is placed, and the sample's other pending tubes with it, which finishes the sample. The screen shows the slot and the boxes, e.g. `SHIP KEEP2 KEEP3 · box 1 · G6`, and advances to the next ready sample. |
-| Aliquoter has no current sample (waiting) and the label's sample is unfinished | **Accepted** the same way, for any sample of the batch, in any order. If it was not marked pulled/labeled, that is recorded as implied by the scan.                                                                              |
-| Label belongs to a different sample                                            | **Rejected** — red screen, error tone, message naming both samples. Logged.                                                                                                                                                      |
-| Unknown label                                                                  | **Rejected** and logged.                                                                                                                                                                                                         |
+| Situation                                                     | Result                                                                                                                                                                                                                          |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tube already placed                                           | Shows its destination again (logged as a repeat).                                                                                                                                                                               |
+| Label belongs to the aliquoter's current sample               | **Accepted**: the tube is placed, and the sample's other pending tubes with it, which finishes the sample. The screen shows the slot and the boxes, e.g. `SHIP KEEP2 KEEP3 · box 1 · G6`, and advances to the next source tube. |
+| No source tube is out, so the aliquoter has no current sample | **Accepted** the same way, for any sample of the batch, in any order. If it was not marked pulled/labeled, that is recorded as implied by the scan.                                                                             |
+| Label belongs to a different sample than the current one      | **Rejected** — red screen, error tone, message naming both samples. Logged.                                                                                                                                                     |
+| Unknown label                                                 | **Rejected** and logged.                                                                                                                                                                                                        |
+
+So within a batch, the one check is against the Puller's tube: the source
+tube they handed over is on the screen, labeled yet or not, and a scan must
+carry its new ID. With nobody pulling, no tube is out, and the Aliquoter
+scans in any order.
 
 Each tube placed is logged as `tube_placed`; one placed along with the
 scanned tube names that tube's label (`withLabel`), so the log keeps which

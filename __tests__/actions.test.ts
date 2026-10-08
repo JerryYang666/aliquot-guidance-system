@@ -242,6 +242,17 @@ describe("scan decisions", () => {
     expect(d.kind === "reject" && d.message).toContain("S0066 (41540)");
   });
 
+  it("checks against a source tube still waiting for its labels", () => {
+    const pulledOnly = { ...current, labeledAt: null };
+    expect(scan("S0067-1", { currentSample: pulledOnly })).toMatchObject({
+      kind: "reject",
+      reason: "wrong_sample",
+    });
+    expect(scan("S0066-1", { currentSample: pulledOnly })).toMatchObject({
+      kind: "place",
+    });
+  });
+
   it("accepts any unfinished sample's tube when the aliquoter is waiting", () => {
     expect(scan("S0067-1", { currentSample: null })).toMatchObject({
       kind: "place",

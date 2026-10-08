@@ -17,10 +17,10 @@ import { destinationFor } from "@/lib/pipeline/destination";
 import { labelFor, parseLabel } from "@/lib/pipeline/labels";
 import {
   isFinished,
+  isLabeled,
   isReady,
-  pulledAwaitingLabels,
   queueOrder,
-  readyToAliquot,
+  sourceTubesOut,
 } from "@/lib/pipeline/queue";
 import type { Sample } from "@/lib/pipeline/types";
 
@@ -65,9 +65,12 @@ export function AliquoterView({
 }: ViewProps) {
   const { destSets } = snapshot.job;
   const boxNumber = snapshot.batch.boxNumber;
-  const ready = readyToAliquot(samples);
+  // Every source tube out on this bench, labeled or not. The one on the
+  // screen (the tapped one, else the first) is what a scan must match.
+  const out = sourceTubesOut(samples);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const current = ready.find((s) => s.id === selectedId) ?? ready[0] ?? null;
+  const current = out.find((s) => s.id === selectedId) ?? out[0] ?? null;
+  const others = out.filter((s) => s.id !== current?.id);
   const [result, setResult] = useState<ScanView | null>(null);
   const [dialog, setDialogState] = useState<Dialog>(null);
   const [note, setNote] = useState("");
@@ -203,11 +206,6 @@ export function AliquoterView({
   const waitingFor = queueOrder(samples).find(
     (s) => !isFinished(s) && !isReady(s),
   );
-  // Source tubes that may reach this bench before their labels do. With
-  // nothing ready, the first of them takes the place of the current tube.
-  const pulled = pulledAwaitingLabels(samples);
-  const arriving = current ? undefined : pulled[0];
-  const alsoPulled = arriving ? pulled.slice(1) : pulled;
 
   return (
     <div className="mx-auto grid max-w-7xl gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-[420px_1fr]">
@@ -223,7 +221,7 @@ export function AliquoterView({
       </ScannerPanel>
 
       <div className="flex flex-col gap-3">
-        {current ? (
+        {current?.labeledAt ? (
           <CurrentSample
             sample={current}
             destSets={destSets}
@@ -233,17 +231,18 @@ export function AliquoterView({
             onFinish={() => setDialog({ kind: "finish" })}
             onNote={() => setDialog({ kind: "note" })}
           />
-        ) : arriving ? (
+        ) : current ? (
+          // A source tube can reach this bench before its labels do.
           <Card className="flex flex-col gap-4 p-5">
             <SourceTube
               label="Pulled, waiting for its labels"
-              sample={arriving}
+              sample={current}
             />
             <div className="flex flex-wrap gap-2">
               <Badge tone="amber" className="text-base">
                 <Hourglass className="size-4" /> Not labeled yet
               </Badge>
-              <SampleFlags sample={arriving} large />
+              <SampleFlags sample={current} large />
             </div>
             <p className="text-slate-600">
               This source tube is out of the freezer, but its new tubes are not
@@ -274,53 +273,16 @@ export function AliquoterView({
           </Card>
         )}
 
-        {ready.length > 1 && (
-          <Card>
-            <Label>Also ready ({ready.length - 1})</Label>
-            <ul className="mt-2 divide-y divide-slate-100">
-              {ready
-                .filter((s) => s.id !== current?.id)
-                .map((s) => (
-                  <li key={s.id}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedId(s.id)}
-                      className="flex w-full items-baseline gap-3 py-2 text-left hover:bg-slate-50"
-                    >
-                      <span className="font-mono text-lg font-semibold">
-                        {s.originalId}
-                      </span>
-                      <span className="font-mono text-slate-600">
-                        {s.newId}
-                      </span>
-                      <span className="ml-auto text-sm text-slate-500">
-                        Switch to this tube
-                      </span>
-                    </button>
-                  </li>
-                ))}
-            </ul>
-          </Card>
-        )}
-
-        {alsoPulled.length > 0 && (
-          <Card>
-            <Label>Pulled, not labeled yet ({alsoPulled.length})</Label>
-            <ul className="mt-2 divide-y divide-slate-100">
-              {alsoPulled.map((s) => (
-                <li key={s.id} className="flex items-baseline gap-3 py-2">
-                  <span className="font-mono text-lg font-semibold">
-                    {s.originalId}
-                  </span>
-                  <span className="font-mono text-slate-600">{s.newId}</span>
-                  <span className="ml-auto text-sm text-slate-500">
-                    Waiting for labels
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
+        <OtherTubes
+          title="Also ready"
+          samples={others.filter(isLabeled)}
+          onSwitch={setSelectedId}
+        />
+        <OtherTubes
+          title="Pulled, not labeled yet"
+          samples={others.filter((s) => !isLabeled(s))}
+          onSwitch={setSelectedId}
+        />
       </div>
 
       {dialog?.kind === "finish" && current && (
@@ -420,6 +382,45 @@ export function AliquoterView({
         </Modal>
       )}
     </div>
+  );
+}
+
+/** Other source tubes out on the bench; tapping one puts it on the screen. */
+function OtherTubes({
+  title,
+  samples,
+  onSwitch,
+}: {
+  title: string;
+  samples: Sample[];
+  onSwitch: (sampleId: string) => void;
+}) {
+  if (samples.length === 0) return null;
+  return (
+    <Card>
+      <Label>
+        {title} ({samples.length})
+      </Label>
+      <ul className="mt-2 divide-y divide-slate-100">
+        {samples.map((s) => (
+          <li key={s.id}>
+            <button
+              type="button"
+              onClick={() => onSwitch(s.id)}
+              className="flex w-full items-baseline gap-3 py-2 text-left hover:bg-slate-50"
+            >
+              <span className="font-mono text-lg font-semibold">
+                {s.originalId}
+              </span>
+              <span className="font-mono text-slate-600">{s.newId}</span>
+              <span className="ml-auto text-sm text-slate-500">
+                Switch to this tube
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 
