@@ -1,0 +1,4 @@
+{$RELAY_DOMAIN} {
+	# WebSocket upgrades are proxied as-is.
+	reverse_proxy relay:8081
+}
