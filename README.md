@@ -29,7 +29,7 @@ Read [docs/design.md](docs/design.md) for how it works and
 
 ## Develop
 
-Needs Node.js 22, Postgres 14+ and, for the relay, Go 1.24.
+Needs Node.js 24, Postgres 14+ and, for the relay, Go 1.24.
 
 ```sh
 npm install
