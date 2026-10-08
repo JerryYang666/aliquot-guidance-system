@@ -55,11 +55,16 @@ code. Nothing is lost.
 
 ## 3. Relay on AWS (EC2)
 
-The relay is a small Go program (`realtime/`). Caddy sits in front of it
-and obtains a Let's Encrypt certificate on its own.
+The relay is a small Go program (`realtime/`). CI builds its container for
+amd64 and arm64 and, on every push to `main` (after the relay's tests
+pass), publishes it to GitHub's container registry as
+`ghcr.io/jerryyang666/aliquot-guidance-system/realtime`, tagged `latest`
+and with the commit's short SHA. The host only pulls it; no build tools or
+registry login are needed there. Caddy sits in front and obtains a Let's
+Encrypt certificate on its own.
 
-1. Launch a small instance (t4g.nano or t3.micro is plenty) with Amazon
-   Linux 2023 or Ubuntu. Attach an Elastic IP.
+1. Launch a small instance (t4g.nano or t3.micro is plenty; the image runs
+   on both) with Amazon Linux 2023 or Ubuntu. Attach an Elastic IP.
 2. Security group: allow inbound TCP 80 and 443 from anywhere (80 is
    needed for the certificate), and SSH from your address only.
 3. DNS: point an A record such as `relay.example.org` at the Elastic IP.
@@ -69,14 +74,22 @@ and obtains a Let's Encrypt certificate on its own.
    git clone https://github.com/JerryYang666/aliquot-guidance-system.git
    cd aliquot-guidance-system/deploy/relay
    cp .env.example .env    # set RELAY_DOMAIN, RELAY_SECRET, ALLOWED_ORIGINS
-   docker compose up -d --build
+   docker compose up -d
    ```
 
 5. Check it: `curl https://relay.example.org/health` returns
    `{"jobs":0,"ok":true,"sockets":0}`.
 
-To update: `git pull && docker compose up -d --build`. Restarting the relay
-is harmless; screens reconnect and refetch.
+The first time the image is published, check that the package is public:
+GitHub → the repository → Packages → `realtime` → Package settings →
+Change visibility → Public. A new container package can start out private
+even in a public repository, and the host's pull then fails with
+"unauthorized".
+
+To update: `git pull && docker compose up -d`. Compose pulls the newest
+`latest` image each time. To pin a version, set `RELAY_TAG` in `.env` to a
+commit's short SHA. Restarting the relay is harmless; screens reconnect and
+refetch.
 
 ## 4. App on Vercel
 
