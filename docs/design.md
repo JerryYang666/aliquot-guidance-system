@@ -64,7 +64,10 @@ were skipped.
 - **Labeler's next** = first sample in queue order not yet labeled.
 - **Aliquoter's ready list** = samples that are pulled **and** labeled but
   not yet finished, in queue order. The aliquoter's current sample is the head
-  of that list unless they tap another one.
+  of that list unless they tap another one. A source tube can reach the
+  aliquoter before its labels are on, so the screen also lists the samples
+  that are pulled but not yet labeled, by original ID, and shows the first
+  of them large when nothing is ready.
 - **Return list** (puller) = finished samples not yet returned, oldest first.
 
 Each sample has three tubes, each `pending`, `placed` (scanned), or

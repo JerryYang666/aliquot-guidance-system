@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   batchProgress,
   isLastFromSourceBox,
+  pulledAwaitingLabels,
   queueOrder,
   readyToAliquot,
   toLabel,
@@ -32,6 +33,25 @@ describe("queue order", () => {
     expect(toPull(all).map((s) => s.pullOrder)).toEqual([3, 4]);
     expect(toLabel(all).map((s) => s.pullOrder)).toEqual([2, 4]);
     expect(readyToAliquot(all).map((s) => s.pullOrder)).toEqual([1]);
+  });
+
+  it("lists pulled samples whose labels are not on yet, in queue order", () => {
+    const ready = makeSample({ pullOrder: 1, pulledAt: T0, labeledAt: T0 });
+    const skipped = makeSample({ pullOrder: 2, pulledAt: T1, skipRank: 1 });
+    const pulled = makeSample({ pullOrder: 3, pulledAt: T0 });
+    const labeled = makeSample({ pullOrder: 4, labeledAt: T0 });
+    const untouched = makeSample({ pullOrder: 5 });
+    const done = makeSample({ pullOrder: 6, pulledAt: T0, finishedAt: T1 });
+    expect(
+      pulledAwaitingLabels([
+        done,
+        untouched,
+        labeled,
+        skipped,
+        pulled,
+        ready,
+      ]).map((s) => s.pullOrder),
+    ).toEqual([3, 2]);
   });
 
   it("drops finished samples from every work list", () => {

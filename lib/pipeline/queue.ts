@@ -35,6 +35,16 @@ export function readyToAliquot(samples: readonly Sample[]): Sample[] {
   return queueOrder(samples).filter(isReady);
 }
 
+/**
+ * Pulled, but its new tubes are not labeled yet. The source tube may already
+ * be on the aliquoter's bench, ahead of the labels.
+ */
+export function pulledAwaitingLabels(samples: readonly Sample[]): Sample[] {
+  return queueOrder(samples).filter(
+    (s) => isPulled(s) && !isLabeled(s) && !isFinished(s),
+  );
+}
+
 /** Finished source tubes still out of the freezer, oldest first. */
 export function toReturn(samples: readonly Sample[]): Sample[] {
   return samples

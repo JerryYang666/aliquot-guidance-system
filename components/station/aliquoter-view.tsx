@@ -18,6 +18,7 @@ import { labelFor, parseLabel } from "@/lib/pipeline/labels";
 import {
   isFinished,
   isReady,
+  pulledAwaitingLabels,
   queueOrder,
   readyToAliquot,
 } from "@/lib/pipeline/queue";
@@ -216,6 +217,11 @@ export function AliquoterView({
   const waitingFor = queueOrder(samples).find(
     (s) => !isFinished(s) && !isReady(s),
   );
+  // Source tubes that may reach this bench before their labels do. With
+  // nothing ready, the first of them takes the place of the current tube.
+  const pulled = pulledAwaitingLabels(samples);
+  const arriving = current ? undefined : pulled[0];
+  const alsoPulled = arriving ? pulled.slice(1) : pulled;
 
   return (
     <div className="mx-auto grid max-w-7xl gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-[420px_1fr]">
@@ -237,6 +243,23 @@ export function AliquoterView({
             onFinish={() => setDialog({ kind: "finish" })}
             onNote={() => setDialog({ kind: "note" })}
           />
+        ) : arriving ? (
+          <Card className="flex flex-col gap-4 p-5">
+            <SourceTube
+              label="Pulled, waiting for its labels"
+              sample={arriving}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Badge tone="amber" className="text-base">
+                <Hourglass className="size-4" /> Not labeled yet
+              </Badge>
+              <SampleFlags sample={arriving} large />
+            </div>
+            <p className="text-slate-600">
+              This source tube is out of the freezer, but its new tubes are not
+              labeled yet. Scanning one of them starts the sample.
+            </p>
+          </Card>
         ) : (
           <Card className="p-6">
             <Label>Waiting</Label>
@@ -286,6 +309,25 @@ export function AliquoterView({
                     </button>
                   </li>
                 ))}
+            </ul>
+          </Card>
+        )}
+
+        {alsoPulled.length > 0 && (
+          <Card>
+            <Label>Pulled, not labeled yet ({alsoPulled.length})</Label>
+            <ul className="mt-2 divide-y divide-slate-100">
+              {alsoPulled.map((s) => (
+                <li key={s.id} className="flex items-baseline gap-3 py-2">
+                  <span className="font-mono text-lg font-semibold">
+                    {s.originalId}
+                  </span>
+                  <span className="font-mono text-slate-600">{s.newId}</span>
+                  <span className="ml-auto text-sm text-slate-500">
+                    Waiting for labels
+                  </span>
+                </li>
+              ))}
             </ul>
           </Card>
         )}
@@ -391,6 +433,22 @@ export function AliquoterView({
   );
 }
 
+/** A source tube to look for: its original ID, large, and what it becomes. */
+function SourceTube({ label, sample }: { label: string; sample: Sample }) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <div className="font-mono text-6xl font-bold tracking-tight sm:text-7xl">
+        {sample.originalId}
+      </div>
+      <div className="mt-1 text-slate-600">
+        New ID <span className="font-mono font-semibold">{sample.newId}</span> ·
+        slot <span className="font-mono font-semibold">{sample.slot}</span>
+      </div>
+    </div>
+  );
+}
+
 function CurrentSample({
   sample,
   destSets,
@@ -410,16 +468,7 @@ function CurrentSample({
 }) {
   return (
     <Card className="flex flex-col gap-4 p-5">
-      <div>
-        <Label>Check the source tube</Label>
-        <div className="font-mono text-6xl font-bold tracking-tight sm:text-7xl">
-          {sample.originalId}
-        </div>
-        <div className="mt-1 text-slate-600">
-          New ID <span className="font-mono font-semibold">{sample.newId}</span>{" "}
-          · slot <span className="font-mono font-semibold">{sample.slot}</span>
-        </div>
-      </div>
+      <SourceTube label="Check the source tube" sample={sample} />
       <div className="flex flex-wrap gap-2">
         <SampleFlags sample={sample} large />
       </div>
