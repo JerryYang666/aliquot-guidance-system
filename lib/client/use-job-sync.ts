@@ -6,7 +6,9 @@ import type {
   ActionResponse,
   AdminJobStateResponse,
   ChangeMessage,
+  HeartbeatResponse,
   OnlineParticipant,
+  PresenceMessage,
   StateResponse,
   TicketResponse,
 } from "@/lib/api-types";
@@ -47,11 +49,9 @@ const SOURCES = {
  * snapshot, then changes pushed by the relay (or found by polling), applied
  * in version order. See lib/client/sync-state.ts.
  */
-function useSync<S extends Snapshot & { online: OnlineParticipant[] }>(
-  viewer: keyof typeof SOURCES,
-  code: string,
-  token: string | undefined,
-) {
+function useSync<
+  S extends Snapshot & { online: OnlineParticipant[]; seenAt?: string },
+>(viewer: keyof typeof SOURCES, code: string, token: string | undefined) {
   const [state, dispatch] = useReducer<SyncState<S>, [SyncAction<S>]>(
     syncReducer,
     initialSyncState,
@@ -82,6 +82,9 @@ function useSync<S extends Snapshot & { online: OnlineParticipant[] }>(
     }
   }, []);
 
+  // When the server last recorded hearing from this station.
+  const seenAt = useRef<string | undefined>(undefined);
+
   /** Fetches a snapshot; calls made while one is running cause exactly one more. */
   const refresh = useCallback((): Promise<void> => {
     if (!ready) return Promise.resolve();
@@ -94,6 +97,7 @@ function useSync<S extends Snapshot & { online: OnlineParticipant[] }>(
         again.current = false;
         try {
           const snapshot = await api<S>(`${base}/state`, { token });
+          seenAt.current = snapshot.seenAt ?? seenAt.current;
           dispatch({ type: "snapshot", snapshot });
           setOnline(snapshot.online);
         } catch (error) {
@@ -122,10 +126,14 @@ function useSync<S extends Snapshot & { online: OnlineParticipant[] }>(
   const refreshOnline = useCallback(async () => {
     if (!ready) return;
     try {
-      const r = await api<{ online: OnlineParticipant[] }>(
-        `${base}/${source.presence}`,
-        { method: source.method, token, retry: false },
-      );
+      const r = await api<
+        Partial<HeartbeatResponse> & { online: OnlineParticipant[] }
+      >(`${base}/${source.presence}`, {
+        method: source.method,
+        token,
+        retry: false,
+      });
+      seenAt.current = r.seenAt ?? seenAt.current;
       setOnline(r.online);
     } catch (error) {
       fail(error);
@@ -142,6 +150,30 @@ function useSync<S extends Snapshot & { online: OnlineParticipant[] }>(
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [ready, refresh]);
+
+  // A station says goodbye as its page goes (tab closed, reload, another
+  // site), so its role is free at once and not after a silence. A beacon
+  // outlives the page; a request started now might not. If the page is kept
+  // and shown again (the back button), it reports in again.
+  useEffect(() => {
+    if (viewer !== "station" || !token) return;
+    const onHide = () => {
+      if (!seenAt.current) return;
+      navigator.sendBeacon(
+        `${base}/away`,
+        JSON.stringify({ token, seenAt: seenAt.current }),
+      );
+    };
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) void refresh();
+    };
+    window.addEventListener("pagehide", onHide);
+    window.addEventListener("pageshow", onShow);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      window.removeEventListener("pageshow", onShow);
+    };
+  }, [viewer, base, token, refresh]);
 
   // The relay socket, reconnecting with backoff.
   useEffect(() => {
@@ -189,6 +221,9 @@ function useSync<S extends Snapshot & { online: OnlineParticipant[] }>(
           setConnection("live");
           // Subscribed now; a snapshot taken from here on misses nothing.
           void refresh();
+        } else if (message.type === "presence") {
+          const { inMs } = message as PresenceMessage;
+          setTimeout(() => void refreshOnline(), inMs);
         } else if (message.type === "change") {
           const change = message as ChangeMessage;
           dispatch({ type: "change", change });
@@ -262,6 +297,7 @@ function useSync<S extends Snapshot & { online: OnlineParticipant[] }>(
     connection,
     fatal,
     refresh,
+    refreshOnline,
     applyResponse,
   };
 }

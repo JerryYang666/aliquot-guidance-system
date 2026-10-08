@@ -1,5 +1,7 @@
 import type { StateResponse } from "@/lib/api-types";
 import { getDb } from "@/lib/db";
+import { after } from "next/server";
+
 import { handle, HttpError, json } from "@/lib/server/errors";
 import {
   batchSamples,
@@ -11,6 +13,7 @@ import {
 } from "@/lib/server/jobs";
 import { jobLayouts } from "@/lib/server/layouts";
 import { heartbeat } from "@/lib/server/participants";
+import { publishPresence } from "@/lib/server/realtime";
 import type { CodeContext } from "@/lib/server/route";
 import { requireParticipant } from "@/lib/server/tokens";
 
@@ -24,7 +27,8 @@ export const GET = handle(async (request: Request, context: CodeContext) => {
   if (!Number.isInteger(batchNumber))
     throw new HttpError(400, "bad_request", "Bad batch number.");
 
-  await heartbeat(db, me);
+  const { seenAt, cameBack } = await heartbeat(db, me);
+  if (cameBack) after(() => publishPresence(me.jobId));
   // One snapshot: the version and the rows it describes are read together.
   const { job, batch, samples, batches, online, layouts } =
     await db.transaction(
@@ -43,6 +47,7 @@ export const GET = handle(async (request: Request, context: CodeContext) => {
       { isolationLevel: "repeatable read", accessMode: "read only" },
     );
   const body: StateResponse = {
+    seenAt,
     version: job.version,
     job: toJobInfo(job),
     batch: {

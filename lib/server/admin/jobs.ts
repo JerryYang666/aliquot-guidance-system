@@ -4,14 +4,9 @@ import { asc, desc, eq, sql } from "drizzle-orm";
 
 import type { AdminJob, AdminJobStateResponse } from "@/lib/api-types";
 import type { Db, DbOrTx } from "@/lib/db";
-import { batches, events, samples } from "@/lib/db/schema";
+import { batches, events, participants, samples } from "@/lib/db/schema";
 
-import {
-  getJobByCode,
-  ONLINE_WINDOW_SECONDS,
-  onlineParticipants,
-  toJobInfo,
-} from "../jobs";
+import { getJobByCode, isOnline, onlineParticipants, toJobInfo } from "../jobs";
 import { jobLayouts } from "../layouts";
 import { toIso, toLogEvent, toSample } from "../rows";
 
@@ -42,12 +37,8 @@ export async function listAllJobs(db: DbOrTx): Promise<AdminJob[]> {
       (SELECT count(*)::int FROM samples s WHERE s.job_id = j.id) AS samples,
       (SELECT count(s.finished_at)::int FROM samples s WHERE s.job_id = j.id)
         AS finished,
-      (SELECT count(*)::int FROM participants p
-        WHERE p.job_id = j.id
-          AND p.left_at IS NULL
-          AND p.last_seen_at >
-            clock_timestamp() - make_interval(secs => ${ONLINE_WINDOW_SECONDS}))
-        AS online,
+      (SELECT count(*)::int FROM ${participants}
+        WHERE ${participants.jobId} = j.id AND ${isOnline}) AS online,
       (SELECT e.at::text FROM events e
         WHERE e.job_id = j.id ORDER BY e.id DESC LIMIT 1) AS last_activity_at
     FROM jobs j

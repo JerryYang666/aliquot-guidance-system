@@ -17,6 +17,7 @@ Any Postgres 14 or newer. Apply the migrations once each, in order:
 ```sh
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/0001_init.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/0002_admin_passkeys.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/0003_participant_presence.sql
 ```
 
 Later migrations are numbered files in `migrations/`, applied the same way.

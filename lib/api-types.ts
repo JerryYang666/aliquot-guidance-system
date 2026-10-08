@@ -27,6 +27,11 @@ export interface OnlineParticipant {
   name: string;
   role: Role;
   batchNumber: number | null;
+  /**
+   * True for someone whose role on their batch is held by a person who was
+   * there first. Their screen is locked until that person has gone.
+   */
+  waiting: boolean;
 }
 
 export interface Me {
@@ -60,6 +65,8 @@ export interface JoinResponse {
 }
 
 export interface StateResponse {
+  /** When the server recorded hearing from this station just now. */
+  seenAt: string;
   version: number;
   job: JobInfo;
   batch: Batch;
@@ -98,6 +105,22 @@ export interface ActionResponse {
   scan?: ScanOutcome;
   labelScan?: LabelScanOutcome;
   duplicate?: boolean;
+}
+
+/** What a station's heartbeat answers. */
+export interface HeartbeatResponse {
+  online: OnlineParticipant[];
+  seenAt: string;
+}
+
+/**
+ * What the relay delivers to every screen on a job when someone has come or
+ * gone without a logged event: time to ask who is online.
+ */
+export interface PresenceMessage {
+  type: "presence";
+  /** How long from now the change takes effect, in milliseconds. */
+  inMs: number;
 }
 
 /** What the relay delivers to every screen on a job after a logged change. */

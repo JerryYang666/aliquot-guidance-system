@@ -282,79 +282,134 @@ describe.skipIf(!url)("pipeline against Postgres", () => {
     ]);
   });
 
-  it("gives each working role on a batch to one person at a time", async () => {
+  it("lets one person hold each working role on a batch while others wait", async () => {
     const db = mod.db.getDb();
     const job = await mod.jobs.getJobByCode(db, code);
     const join = (
       name: string,
       role: "puller" | "labeler" | "aliquoter" | "overview",
-      batchNumber = 1,
-      more: { attempt?: string; current?: typeof tokens.puller } = {},
+      batchNumber: number,
+      attempt?: string,
     ) =>
       mod.participants.joinJob(
         db,
         job.id,
-        { name, role, batchNumber, attempt: more.attempt },
+        { name, role, batchNumber, attempt },
         "vitest",
-        more.current?.participant ?? null,
       );
-    const count = async () =>
-      (await db.select().from(mod.schema.participants)).length;
+    /** Each person online in a role on a batch, and whether they are waiting. */
+    const line = async (role: string, batchNumber: number) =>
+      (await mod.jobs.onlineParticipants(db, job.id))
+        .filter((p) => p.role === role && p.batchNumber === batchNumber)
+        .map((p) => `${p.name}${p.waiting ? " (waiting)" : ""}`);
 
-    // Pat is the Puller on batch 1; a second Puller is turned away, and
-    // nothing is recorded of the attempt.
-    const before = { people: await count(), version: job.version };
-    await expect(join("Sam", "puller")).rejects.toMatchObject({
-      status: 409,
-      code: "role_taken",
-      message: expect.stringContaining("Pat is already the Puller on batch 1"),
-    });
-    expect(await count()).toBe(before.people);
-    expect((await mod.jobs.getJobByCode(db, code)).version).toBe(
-      before.version,
+    // Pat is the Puller on batch 1. Sam joins the same role: nobody is
+    // turned away, but Sam waits.
+    await join("Sam", "puller", 1);
+    expect(await line("puller", 1)).toEqual(["Pat", "Sam (waiting)"]);
+
+    // Another batch is another set of stations, and Overview is never held.
+    const tess = await join("Tess", "puller", 2);
+    await join("Olive", "overview", 1);
+    await join("Omar", "overview", 1);
+    expect(await line("puller", 2)).toEqual(["Tess"]);
+    expect(await line("overview", 1)).toEqual(["Olive", "Omar"]);
+
+    // When the holder leaves, the next in line has the role at once.
+    await join("Uma", "puller", 2);
+    await join("Vic", "puller", 2);
+    expect(await line("puller", 2)).toEqual([
+      "Tess",
+      "Uma (waiting)",
+      "Vic (waiting)",
+    ]);
+    await mod.participants.leaveJob(db, tess.participant);
+    expect(await line("puller", 2)).toEqual(["Uma", "Vic (waiting)"]);
+
+    // A join that is sent twice is one join: one station, logged once, and
+    // not waiting behind itself.
+    const attempt = crypto.randomUUID();
+    const first = await join("Ray", "aliquoter", 2, attempt);
+    const retried = await join("Ray", "aliquoter", 2, attempt);
+    expect(retried.participant).toEqual(first.participant);
+    expect(retried.events).toEqual([]);
+    expect(await line("aliquoter", 2)).toEqual(["Ray"]);
+  });
+
+  it("hands a role on when its holder goes, and leaves it there", async () => {
+    const db = mod.db.getDb();
+    const job = await mod.jobs.getJobByCode(db, code);
+    const join = (name: string) =>
+      mod.participants.joinJob(
+        db,
+        job.id,
+        { name, role: "labeler", batchNumber: 2 },
+        "vitest",
+      );
+    const line = async () =>
+      (await mod.jobs.onlineParticipants(db, job.id))
+        .filter((p) => p.role === "labeler" && p.batchNumber === 2)
+        .map((p) => `${p.name}${p.waiting ? " (waiting)" : ""}`);
+    const events = async () =>
+      (await db.select().from(mod.schema.events)).length;
+    const row = (who: typeof gail) =>
+      eq(mod.schema.participants.id, who.participant.participantId);
+    // The few seconds a goodbye takes to count, passed in one step.
+    const graceOver = (who: typeof gail) =>
+      db
+        .update(mod.schema.participants)
+        .set({ goneAt: sql`gone_at - interval '10 seconds'` })
+        .where(row(who));
+
+    const gail = await join("Gail");
+    const hal = await join("Hal");
+    expect(await line()).toEqual(["Gail", "Hal (waiting)"]);
+
+    // Gail closes her tab. For a few seconds nothing changes, in case it
+    // was a reload. Then she is off the list and Hal has the role. Nothing
+    // is written to the log.
+    const { seenAt } = await mod.participants.heartbeat(db, gail.participant);
+    const logged = await events();
+    expect(await mod.participants.goAway(db, gail.participant, seenAt)).toBe(
+      true,
     );
+    expect(await line()).toEqual(["Gail", "Hal (waiting)"]);
+    await graceOver(gail);
+    expect(await line()).toEqual(["Hal"]);
+    expect(await events()).toBe(logged);
 
-    // Another batch is another set of stations, and Overview is open to all.
-    const sam = await join("Sam", "puller", 2);
-    await join("Olive", "overview");
-    await join("Omar", "overview");
+    // Her page comes back. Hal keeps the role; she waits behind him.
+    const back = await mod.participants.heartbeat(db, gail.participant);
+    expect(back.cameBack).toBe(true);
+    expect(await line()).toEqual(["Hal", "Gail (waiting)"]);
 
-    // Leaving frees the role at once.
-    await expect(join("Kim", "puller", 2)).rejects.toMatchObject({
-      code: "role_taken",
-    });
-    await mod.participants.leaveJob(db, sam.participant);
-    const kim = await join("Kim", "puller", 2);
+    // A goodbye from before she came back arrives late: it is ignored.
+    expect(await mod.participants.goAway(db, gail.participant, seenAt)).toBe(
+      false,
+    );
+    await graceOver(gail);
+    expect(await line()).toEqual(["Hal", "Gail (waiting)"]);
 
-    // So does going quiet for longer than the online window.
-    await expect(join("Lou", "labeler")).rejects.toMatchObject({
-      code: "role_taken",
-    });
+    // Hal reloads: a goodbye, and his page is back within the grace. He
+    // was never offline, and keeps his place.
+    const before = await mod.participants.heartbeat(db, hal.participant);
+    await mod.participants.goAway(db, hal.participant, before.seenAt);
+    const reloaded = await mod.participants.heartbeat(db, hal.participant);
+    expect(reloaded.cameBack).toBe(false);
+    expect(await line()).toEqual(["Hal", "Gail (waiting)"]);
+
+    // Hal's device dies without a word. Once it has been quiet for longer
+    // than the online window, the role passes to Gail, and stays with her
+    // when Hal turns up again.
     await db
       .update(mod.schema.participants)
       .set({ lastSeenAt: sql`clock_timestamp() - interval '2 minutes'` })
-      .where(eq(mod.schema.participants.id, as("labeler").participantId));
-    await join("Lou", "labeler");
-
-    // A tab that already holds the station can join again in its place.
-    await expect(join("Kim", "puller", 2)).rejects.toMatchObject({
-      code: "role_taken",
-    });
-    const again = await join("Kim K.", "puller", 2, { current: kim });
-    expect(again.participant.participantId).not.toBe(
-      kim.participant.participantId,
-    );
-    await mod.participants.leaveJob(db, kim.participant);
-
-    // A join that is sent twice is one join: same station, logged once.
-    await mod.participants.leaveJob(db, again.participant);
-    const attempt = crypto.randomUUID();
-    const first = await join("Ray", "puller", 2, { attempt });
-    const people = await count();
-    const retried = await join("Ray", "puller", 2, { attempt });
-    expect(retried.participant).toEqual(first.participant);
-    expect(retried.events).toEqual([]);
-    expect(await count()).toBe(people);
+      .where(row(hal));
+    expect(await line()).toEqual(["Gail"]);
+    expect(
+      (await mod.participants.heartbeat(db, hal.participant)).cameBack,
+    ).toBe(true);
+    expect(await line()).toEqual(["Gail", "Hal (waiting)"]);
   });
 
   it("keeps versions gapless and the log append-only", async () => {

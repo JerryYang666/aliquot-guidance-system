@@ -227,6 +227,7 @@ export function BatchOverview({
                 <span className="text-slate-500">
                   {ROLE_LABELS[p.role]}
                   {p.batchNumber ? ` · batch ${p.batchNumber}` : ""}
+                  {p.waiting ? " · waiting" : ""}
                 </span>
               </li>
             ))}

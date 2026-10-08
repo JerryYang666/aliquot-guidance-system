@@ -2,17 +2,12 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { Db } from "@/lib/db";
 import { jobs, participants } from "@/lib/db/schema";
-import {
-  ROLE_LABELS,
-  ROLES,
-  type LogEvent,
-  type Role,
-} from "@/lib/pipeline/types";
+import { ROLES, type LogEvent, type Role } from "@/lib/pipeline/types";
 
 import { commitChange } from "./actions";
 import { HttpError } from "./errors";
@@ -33,8 +28,8 @@ export const joinRequestSchema = z.object({
 /**
  * The participant an attempt to join creates. A browser that gets no answer
  * sends the same attempt again; it must find the station it already took,
- * not be turned away by it. The attempt is known only to that browser, so
- * nobody else can arrive at this ID.
+ * not take a second one and wait behind itself. The attempt is known only
+ * to that browser, so nobody else can arrive at this ID.
  */
 function participantIdFor(jobId: string, attempt: string | undefined): string {
   if (!attempt) return crypto.randomUUID();
@@ -57,19 +52,14 @@ export interface JoinResult {
 
 /**
  * Records a person taking a station (role + batch) and hands back their
- * token. A batch has one Puller, one Labeler and one Aliquoter at a time:
- * while someone holds one of those stations and is online, nobody else can
- * take it. Any number of people can be Overview.
- *
- * `current` is the station the joining tab already holds, if it holds one.
- * That tab is switching, so its own station does not stand in its way.
+ * token. Nobody is turned away: if the role is taken on that batch, they
+ * wait behind whoever holds it (see onlineParticipants).
  */
 export async function joinJob(
   db: Db,
   jobId: string,
   input: z.infer<typeof joinRequestSchema>,
   userAgent: string | null,
-  current: Participant | null = null,
 ): Promise<JoinResult> {
   await getBatch(db, jobId, input.batchNumber);
   return db.transaction(async (tx) => {
@@ -101,30 +91,6 @@ export async function joinJob(
         version: job.version,
         events: [],
       };
-    }
-    if (input.role !== "overview") {
-      // The job row is locked, so two people joining at once are checked
-      // one after the other.
-      const [holder] = await tx
-        .select({ name: participants.name })
-        .from(participants)
-        .where(
-          and(
-            eq(participants.jobId, jobId),
-            eq(participants.role, input.role),
-            eq(participants.batchNumber, input.batchNumber),
-            current ? ne(participants.id, current.participantId) : undefined,
-            isOnline,
-          ),
-        )
-        .limit(1);
-      if (holder) {
-        throw new HttpError(
-          409,
-          "role_taken",
-          `${holder.name} is already the ${ROLE_LABELS[input.role]} on batch ${input.batchNumber}. If they have gone, the role frees up within about a minute.`,
-        );
-      }
     }
     await tx.insert(participants).values({
       id: participantId,
@@ -192,10 +158,67 @@ export async function leaveJob(db: Db, p: Participant) {
   });
 }
 
-/** Marks the station as alive; the online list is who did this recently. */
-export async function heartbeat(db: Db, p: Participant): Promise<void> {
-  await db
+/**
+ * Marks the station as alive: the online list is who did this recently and
+ * has not said goodbye since. Returns the moment recorded, which the
+ * station hands back if it says goodbye (see goAway), and whether this
+ * brought it back from being offline.
+ *
+ * A station that comes back from offline takes a new place in line for its
+ * role. If someone took the role over while it was away, they keep it.
+ */
+export async function heartbeat(
+  db: Db,
+  p: Participant,
+): Promise<{ seenAt: string; cameBack: boolean }> {
+  const [me] = await db
+    .select({ wasOnline: sql<boolean>`${isOnline}` })
+    .from(participants)
+    .where(eq(participants.id, p.participantId))
+    .limit(1);
+  if (!me) throw new HttpError(401, "rejoin", "Join the job again.");
+  const [seen] = await db
     .update(participants)
-    .set({ lastSeenAt: sql`clock_timestamp()` })
-    .where(eq(participants.id, p.participantId));
+    .set({
+      lastSeenAt: sql`clock_timestamp()`,
+      goneAt: null,
+      ...(me.wasOnline ? {} : { queuedAt: sql`clock_timestamp()` }),
+    })
+    .where(eq(participants.id, p.participantId))
+    .returning({ at: participants.lastSeenAt });
+  return { seenAt: seen?.at ?? "", cameBack: !me.wasOnline };
+}
+
+/** A timestamp exactly as Postgres prints one, which is how `seenAt` travels. */
+export const SEEN_AT_PATTERN =
+  /^\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d(\.\d{1,6})?(Z|[+-]\d\d(:?\d\d)?)$/;
+
+/**
+ * Records that a station's page is going away: its tab was closed, or it is
+ * reloading. A few seconds later (GOODBYE_GRACE_SECONDS) it counts as
+ * offline, and whoever waits for its role has it, unless the page is back
+ * by then. This is not a leave and is not logged.
+ *
+ * `seenAt` is what the page's last heartbeat returned. A reload can deliver
+ * the old page's goodbye after the new page's first heartbeat; by then the
+ * two no longer match, and the goodbye is ignored.
+ */
+export async function goAway(
+  db: Db,
+  p: Participant,
+  seenAt: string,
+): Promise<boolean> {
+  const gone = await db
+    .update(participants)
+    .set({ goneAt: sql`clock_timestamp()` })
+    .where(
+      and(
+        eq(participants.id, p.participantId),
+        isNull(participants.leftAt),
+        isNull(participants.goneAt),
+        sql`${participants.lastSeenAt} = ${seenAt}::timestamptz`,
+      ),
+    )
+    .returning({ id: participants.id });
+  return gone.length > 0;
 }

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, or, sql, type SQL } from "drizzle-orm";
 
 import type { BatchListItem, OnlineParticipant } from "@/lib/api-types";
 import type { DbOrTx } from "@/lib/db";
@@ -19,14 +19,33 @@ import { toIso, toSample } from "./rows";
 
 export const ONLINE_WINDOW_SECONDS = 75;
 
-/** Online: has not left, and was heard from within the window. */
-export const isOnline = and(
+/**
+ * How long after a page says goodbye its station still counts as online. A
+ * reload says goodbye too, and the page is back within a moment; without
+ * this, someone waiting could take the role in that moment.
+ */
+export const GOODBYE_GRACE_SECONDS = 5;
+
+/**
+ * Online: has not left, did not say goodbye more than a few seconds ago,
+ * and was heard from within the window. The window is only the fallback,
+ * for a station that vanishes without a word (a crash, a dead battery, no
+ * network).
+ */
+export const isOnline: SQL = sql`${and(
   isNull(participants.leftAt),
+  or(
+    isNull(participants.goneAt),
+    gt(
+      participants.goneAt,
+      sql`clock_timestamp() - make_interval(secs => ${GOODBYE_GRACE_SECONDS})`,
+    ),
+  ),
   gt(
     participants.lastSeenAt,
     sql`clock_timestamp() - make_interval(secs => ${ONLINE_WINDOW_SECONDS})`,
   ),
-);
+)}`;
 
 export async function getJobByCode(
   db: DbOrTx,
@@ -101,11 +120,16 @@ export async function batchSamples(
   return rows.map(toSample);
 }
 
+/**
+ * Who is on the job now. A batch has one Puller, one Labeler and one
+ * Aliquoter at work: of several people in the same role, the one who has
+ * been there longest holds it and the others wait. Overview is never held.
+ */
 export async function onlineParticipants(
   db: DbOrTx,
   jobId: string,
 ): Promise<OnlineParticipant[]> {
-  return db
+  const rows = await db
     .select({
       id: participants.id,
       name: participants.name,
@@ -114,5 +138,12 @@ export async function onlineParticipants(
     })
     .from(participants)
     .where(and(eq(participants.jobId, jobId), isOnline))
-    .orderBy(asc(participants.joinedAt));
+    .orderBy(asc(participants.queuedAt), asc(participants.joinedAt));
+  const held = new Set<string>();
+  return rows.map((p) => {
+    const station = `${p.role} ${p.batchNumber}`;
+    const waiting = p.role !== "overview" && held.has(station);
+    held.add(station);
+    return { ...p, waiting };
+  });
 }

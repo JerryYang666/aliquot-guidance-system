@@ -52,7 +52,12 @@ function BatchTile({
         )}
         <span className="truncate">
           {here.length
-            ? here.map((p) => `${p.name} (${ROLE_LABELS[p.role]})`).join(", ")
+            ? here
+                .map(
+                  (p) =>
+                    `${p.name} (${ROLE_LABELS[p.role]}${p.waiting ? ", waiting" : ""})`,
+                )
+                .join(", ")
             : progress.finished === progress.total
               ? "Done"
               : started

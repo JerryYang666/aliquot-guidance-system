@@ -223,6 +223,7 @@ export function StationHeader({
                       <span className="shrink-0 text-slate-500">
                         {ROLE_LABELS[p.role]}
                         {p.batchNumber ? ` · B${p.batchNumber}` : ""}
+                        {p.waiting ? " · waiting" : ""}
                       </span>
                     </div>
                   ))}

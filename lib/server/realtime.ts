@@ -2,7 +2,7 @@ import "server-only";
 
 import { SignJWT } from "jose";
 
-import type { ChangeMessage } from "@/lib/api-types";
+import type { ChangeMessage, PresenceMessage } from "@/lib/api-types";
 
 import { relayConfig } from "./env";
 
@@ -34,9 +34,25 @@ export async function mintRelayTicket(
  * Tells every screen on the job about a committed change. Best effort: a
  * screen that misses it notices the version gap (or polls) and refetches.
  */
-export async function publishChange(
+export function publishChange(
   jobId: string,
   message: ChangeMessage,
+): Promise<void> {
+  return publish(jobId, message);
+}
+
+/**
+ * Tells every screen on the job that who is online has changed, or is about
+ * to, without an event to say so (a station's page went away, or came
+ * back). Best effort: each screen asks again every half minute anyway.
+ */
+export function publishPresence(jobId: string, inMs = 0): Promise<void> {
+  return publish(jobId, { type: "presence", inMs });
+}
+
+async function publish(
+  jobId: string,
+  message: ChangeMessage | PresenceMessage,
 ): Promise<void> {
   const relay = relayConfig();
   if (!relay) return;

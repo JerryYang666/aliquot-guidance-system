@@ -34,7 +34,8 @@ const ROLE_INFO: { role: Role; text: string }[] = [
   { role: "overview", text: "Watches progress and fixes mistakes." },
 ];
 
-const REFRESH_MS = 10_000;
+// Short, because someone may be waiting here for a role to come free.
+const REFRESH_MS = 3_000;
 
 export function JoinForm({ code }: { code: string }) {
   const router = useRouter();
@@ -94,9 +95,6 @@ export function JoinForm({ code }: { code: string }) {
     setError(null);
     try {
       const r = await api<JoinResponse>(`/api/jobs/${code}/join`, {
-        // Sent with the station this tab already holds, so that one does
-        // not count as someone else in the role.
-        token: existing?.token,
         body: {
           name: name.trim(),
           role,
@@ -104,6 +102,8 @@ export function JoinForm({ code }: { code: string }) {
           attempt: randomId(),
         },
       });
+      // This tab was another station until now; give that one up, so the
+      // new one does not wait behind it.
       if (existing) {
         await api(`/api/jobs/${code}/leave`, {
           method: "POST",
@@ -115,12 +115,6 @@ export function JoinForm({ code }: { code: string }) {
     } catch (e) {
       setError(e instanceof ApiFailure ? e.message : "Could not join.");
       setJoining(false);
-      if (e instanceof ApiFailure && e.code === "role_taken") {
-        void api<JobSummaryResponse>(`/api/jobs/${code}`).then(
-          setSummary,
-          () => undefined,
-        );
-      }
     }
   };
 
@@ -137,9 +131,9 @@ export function JoinForm({ code }: { code: string }) {
   }
   if (!summary) return <p className="text-slate-500">Loading job…</p>;
 
-  // Who holds a working role on the chosen batch, if anyone does. Overview
-  // is open to any number of people, and this tab's own station is not in
-  // its way: joining from here replaces it.
+  // Who holds a working role on the chosen batch, if anyone does. Joining
+  // it anyway means waiting for them. This tab's own station does not
+  // count: joining from here replaces it.
   const holderOf = (r: Role) =>
     r === "overview"
       ? undefined
@@ -147,9 +141,9 @@ export function JoinForm({ code }: { code: string }) {
           (p) =>
             p.role === r &&
             p.batchNumber === chosenBatch &&
+            !p.waiting &&
             p.id !== existing?.me.participantId,
         );
-  const roleIsFree = role !== null && !holderOf(role);
 
   return (
     <form onSubmit={join} className="flex flex-col gap-5">
@@ -236,23 +230,28 @@ export function JoinForm({ code }: { code: string }) {
                 key={r}
                 type="button"
                 onClick={() => setRole(r)}
-                disabled={Boolean(holder)}
-                aria-pressed={role === r && !holder}
+                aria-pressed={role === r}
                 className={cx(
                   "flex items-start gap-3 rounded-xl p-4 text-left ring-1",
-                  holder
-                    ? "cursor-not-allowed bg-slate-50 text-slate-400 ring-slate-200"
-                    : role === r
-                      ? "bg-slate-900 text-white ring-slate-900"
-                      : "bg-white ring-slate-200 hover:ring-slate-400",
+                  role === r
+                    ? "bg-slate-900 text-white ring-slate-900"
+                    : "bg-white ring-slate-200 hover:ring-slate-400",
                 )}
               >
                 <Icon className="mt-0.5 size-6 shrink-0" />
                 <span>
                   <span className="block font-semibold">{ROLE_LABELS[r]}</span>
-                  <span className="text-sm opacity-80">
-                    {holder ? `Taken by ${holder.name}.` : text}
-                  </span>
+                  <span className="block text-sm opacity-80">{text}</span>
+                  {holder && (
+                    <span
+                      className={cx(
+                        "mt-1 block text-sm font-medium",
+                        role === r ? "text-amber-300" : "text-amber-700",
+                      )}
+                    >
+                      {holder.name} has this role now. You would wait for them.
+                    </span>
+                  )}
                 </span>
               </button>
             );
@@ -265,7 +264,7 @@ export function JoinForm({ code }: { code: string }) {
         type="submit"
         variant="primary"
         size="xl"
-        disabled={joining || !roleIsFree || !name.trim() || !chosenBatch}
+        disabled={joining || !role || !name.trim() || !chosenBatch}
       >
         {joining ? "Joining…" : "Start"}
       </Button>

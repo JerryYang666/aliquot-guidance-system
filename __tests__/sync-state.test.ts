@@ -19,6 +19,7 @@ const b = makeSample({ batchNumber: 1 });
 
 function snapshot(version: number, samples: Sample[] = [a, b]): StateResponse {
   return {
+    seenAt: T0,
     version,
     samples,
     job: {
@@ -133,6 +134,7 @@ describe("a snapshot of the whole job", () => {
     const {
       batch: _batch,
       me: _me,
+      seenAt: _seenAt,
       batches: _batches,
       ...rest
     } = snapshot(version, [a, b, other]);

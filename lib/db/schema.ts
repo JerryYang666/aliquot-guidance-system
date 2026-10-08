@@ -102,6 +102,10 @@ export const participants = pgTable("participants", {
     .notNull()
     .default(sql`clock_timestamp()`),
   leftAt: ts("left_at"),
+  goneAt: ts("gone_at"),
+  queuedAt: ts("queued_at")
+    .notNull()
+    .default(sql`clock_timestamp()`),
 });
 
 export const events = pgTable(

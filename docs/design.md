@@ -45,14 +45,15 @@ accounts; only admins sign in (see [Admins](#admins)).
   gate, by design.
 - **Join**: enter the code, your **name**, the **batch**, and a **role**
   (Puller, Labeler, Aliquoter, or Overview). A batch has one Puller, one
-  Labeler and one Aliquoter at a time: a role that someone online already
-  holds is shown as taken, and the server refuses a second join to it. The
-  role frees up when its holder leaves, or about a minute after their screen
-  goes quiet. Overview is open to any number of people. The join is logged.
-  The server returns a signed participant token (HS256, `APP_SECRET`) kept
-  in the tab's `sessionStorage`, so each tab is its own station and every
-  action is attributed to the name given at join. The name is remembered in
-  `localStorage` to prefill the next join.
+  Labeler and one Aliquoter at work at a time. Nobody is turned away: the
+  join screen says who has a role, and someone who joins it anyway waits.
+  Their station is locked, says who has the role and to ask them to leave,
+  and opens by itself when that person has gone (see
+  [Real-time sync](#real-time-sync)). Overview is open to any number of
+  people. The join is logged. The server returns a signed participant token
+  (HS256, `APP_SECRET`) kept in the tab's `sessionStorage`, so each tab is
+  its own station and every action is attributed to the name given at join.
+  The name is remembered in `localStorage` to prefill the next join.
 
 ## Pipeline rules
 
@@ -152,6 +153,9 @@ transaction as the events that change them, so they can never disagree.
 
 `migrations/0002_admin_passkeys.sql` adds `admin_passkeys` and
 `admin_invites` (see [Admins](#admins)).
+`migrations/0003_participant_presence.sql` adds to `participants` when a
+station said goodbye and since when it has been in line for its role (see
+[Real-time sync](#real-time-sync)).
 
 ### Actions and ordering
 
@@ -196,7 +200,18 @@ Logged event types: `job_created`, `participant_joined`, `participant_left`,
   cheap version endpoint every 2 s and refetch on change. The app works fully
   without the relay, only slower to update.
 - **Presence**: each screen heartbeats every 30 s; the job's "online" list is
-  the participants seen in the last 75 s.
+  the participants seen in the last 75 s. A page that is closed or reloaded
+  does not wait to be missed: it sends a goodbye as it goes, and counts as
+  offline 5 seconds later unless it is back by then (a reload is). The 75 s
+  are the fallback for a station that vanishes without a word. None of this
+  is logged; only joining and leaving are.
+- **Who holds a role**: of several people online in the same working role on
+  a batch, the one who has been there longest holds it and the others wait
+  with their stations locked. "Longest" counts from joining, and again from
+  each return after being offline, so someone who drops out and comes back
+  waits behind whoever took over. Presence lives in the database, not in the
+  relay: the relay only tells screens to ask again, so the rule holds
+  without it and survives its restarts.
 
 ## Phone and browser details
 
