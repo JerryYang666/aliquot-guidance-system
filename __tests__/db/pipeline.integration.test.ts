@@ -258,6 +258,45 @@ describe.skipIf(!url)("pipeline against Postgres", () => {
     ).toEqual(Array(5).fill("already_pulled"));
   });
 
+  it("marks a sample labeled when the labeler has scanned all its labels", async () => {
+    const s2 = await sample("S0002");
+    const scan = (label: string) =>
+      act("labeler", { type: "label_scan", label, currentSampleId: s2.id });
+
+    expect((await scan("S0002-1")).labelScan).toMatchObject({
+      kind: "record",
+      set: "Ship",
+      sampleLabeled: false,
+    });
+    const wrong = await scan("S0003-1");
+    expect(wrong.ok).toBe(false);
+    expect(wrong.events[0]).toMatchObject({
+      type: "label_scan_rejected",
+      actorName: "Lee",
+      data: { reason: "wrong_sample" },
+    });
+    expect((await scan("S0002-1")).labelScan).toMatchObject({ kind: "repeat" });
+    await scan("S0002-3");
+    const last = await scan("s0002-2");
+    expect(last.labelScan).toMatchObject({
+      kind: "record",
+      label: "S0002-2",
+      sampleLabeled: true,
+    });
+    expect(last.events.map((e) => e.type)).toEqual([
+      "label_scanned",
+      "sample_labeled",
+    ]);
+
+    const row = await sample("S0002");
+    expect(row.labeledBy).toBe("Lee");
+    expect(row.tubes.map((t) => t.labelScannedBy)).toEqual([
+      "Lee",
+      "Lee",
+      "Lee",
+    ]);
+  });
+
   it("keeps versions gapless and the log append-only", async () => {
     const db = mod.db.getDb();
     const job = await mod.jobs.getJobByCode(db, code);

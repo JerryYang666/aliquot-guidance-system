@@ -77,12 +77,24 @@ export type ScanOutcome =
     }
   | { kind: "reject"; reason: string; message: string };
 
+export type LabelScanOutcome =
+  | {
+      kind: "record" | "repeat";
+      label: string;
+      tube: number;
+      set: string;
+      /** True once all of the sample's labels are scanned (or it was labeled anyway). */
+      sampleLabeled: boolean;
+    }
+  | { kind: "reject"; reason: string; message: string };
+
 export interface ActionResponse {
   ok: boolean;
   version: number;
   samples: Sample[];
   events: LogEvent[];
   scan?: ScanOutcome;
+  labelScan?: LabelScanOutcome;
   duplicate?: boolean;
 }
 

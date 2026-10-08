@@ -21,6 +21,14 @@ export type SampleAction =
   | { type: "undo_return"; sampleId: string }
   | { type: "note"; sampleId: string; text: string };
 
+/** The labeler scanning a freshly labeled tube. */
+export interface LabelScanAction {
+  type: "label_scan";
+  label: string;
+  /** The sample the labeler's screen asks for, or null when nothing is left to label. */
+  currentSampleId: string | null;
+}
+
 export interface ScanAction {
   type: "scan";
   label: string;
@@ -28,7 +36,7 @@ export interface ScanAction {
   currentSampleId: string | null;
 }
 
-export type Action = SampleAction | ScanAction;
+export type Action = SampleAction | ScanAction | LabelScanAction;
 
 export interface ActionError {
   code: string;
@@ -134,9 +142,19 @@ export function applySampleAction(
           "aliquot_started",
           `${id} already has tubes placed; undo those first.`,
         );
-      const previous = { previousAt: s.labeledAt, previousBy: s.labeledBy };
+      const previous = {
+        previousAt: s.labeledAt,
+        previousBy: s.labeledBy,
+        clearedLabelScans: s.tubes.filter((t) => t.labelScannedAt).length,
+      };
       s.labeledAt = null;
       s.labeledBy = null;
+      // The labels are coming off, so their scans no longer count.
+      s.tubes = s.tubes.map((t) => ({
+        ...t,
+        labelScannedAt: null,
+        labelScannedBy: null,
+      }));
       return {
         ok: true,
         sample: s,
@@ -159,7 +177,7 @@ export function applySampleAction(
       s.tubes = s.tubes.map((t, i) => {
         if (t.status !== "pending") return t;
         notFilled.push(i + 1);
-        return { status: "not_filled", at: now, by: actor };
+        return { ...t, status: "not_filled", at: now, by: actor };
       });
       s.finishedAt = now;
       s.finishedBy = actor;
@@ -192,7 +210,7 @@ export function applySampleAction(
       s.tubes = s.tubes.map((t, i) => {
         if (t.status !== "not_filled") return t;
         refilled.push(i + 1);
-        return { status: "pending", at: null, by: null };
+        return { ...t, status: "pending", at: null, by: null };
       });
       const previous = {
         previousAt: s.finishedAt,
@@ -225,7 +243,12 @@ export function applySampleAction(
         previousStatus: tube.status,
         previousAt: tube.at,
       };
-      s.tubes[action.tube - 1] = { status: "pending", at: null, by: null };
+      s.tubes[action.tube - 1] = {
+        ...tube,
+        status: "pending",
+        at: null,
+        by: null,
+      };
       if (s.finishedAt) {
         previous.reopened = true;
         s.finishedAt = null;
@@ -304,9 +327,13 @@ export interface ScanInput {
   destCount: number;
 }
 
-/** The scan rules from docs/design.md ("What a scan does"). */
-export function decideScan(input: ScanInput): ScanDecision {
-  const { parsed, labelSample, currentSample } = input;
+type LabelCheck =
+  | { kind: "reject"; reason: ScanRejectReason; message: string }
+  | { kind: "ok"; sample: Sample; tube: number; text: string };
+
+/** What every scan must pass, at either station: a readable label for a tube of a sample in this batch. */
+function checkLabel(input: ScanInput): LabelCheck {
+  const { parsed, labelSample } = input;
   const text = normalizeLabel(input.label);
   if (!parsed)
     return {
@@ -332,19 +359,92 @@ export function decideScan(input: ScanInput): ScanDecision {
       reason: "other_batch",
       message: `${text} belongs to batch ${labelSample.batchNumber}; this screen is on batch ${input.batchNumber}.`,
     };
-  if (labelSample.tubes[parsed.tube - 1]?.status === "placed")
-    return { kind: "repeat", sample: labelSample, tube: parsed.tube };
+  return { kind: "ok", sample: labelSample, tube: parsed.tube, text };
+}
+
+/** The aliquoter's scan rules from docs/design.md ("What a scan does"). */
+export function decideScan(input: ScanInput): ScanDecision {
+  const check = checkLabel(input);
+  if (check.kind === "reject") return check;
+  const { sample, tube, text } = check;
+  const { currentSample } = input;
+  if (sample.tubes[tube - 1]?.status === "placed")
+    return { kind: "repeat", sample, tube };
   if (
     currentSample &&
     !isFinished(currentSample) &&
-    currentSample.id !== labelSample.id
+    currentSample.id !== sample.id
   )
     return {
       kind: "reject",
       reason: "wrong_sample",
       message: `${text} is not for the current tube ${currentSample.newId} (${currentSample.originalId}).`,
     };
-  return { kind: "place", sample: labelSample, tube: parsed.tube };
+  return { kind: "place", sample, tube };
+}
+
+export type LabelScanDecision =
+  | { kind: "reject"; reason: ScanRejectReason; message: string }
+  | { kind: "repeat"; sample: Sample; tube: number }
+  | { kind: "record"; sample: Sample; tube: number };
+
+/**
+ * The labeler's scan rules: scanning a freshly labeled tube checks that it
+ * carries one of the labels the screen asked for. `currentSample` is the
+ * sample the labeler's screen shows, or null when nothing is left to label.
+ */
+export function decideLabelScan(input: ScanInput): LabelScanDecision {
+  const check = checkLabel(input);
+  if (check.kind === "reject") return check;
+  const { sample, tube, text } = check;
+  const { currentSample } = input;
+  if (sample.tubes[tube - 1]?.labelScannedAt)
+    return { kind: "repeat", sample, tube };
+  if (
+    currentSample &&
+    !currentSample.labeledAt &&
+    !isFinished(currentSample) &&
+    currentSample.id !== sample.id
+  )
+    return {
+      kind: "reject",
+      reason: "wrong_sample",
+      message: `${text} is not one of the labels for ${currentSample.newId}. Check the label on this tube.`,
+    };
+  return { kind: "record", sample, tube };
+}
+
+/** Records a labeler's scan; the last of the sample's tubes marks the sample labeled. */
+export function applyLabelScan(
+  sample: Sample,
+  tube: number,
+  ctx: ActionContext,
+): { sample: Sample; events: EventDraft[] } {
+  const { now, actor } = ctx;
+  const s = { ...sample, tubes: sample.tubes.map((t) => ({ ...t })) };
+  s.tubes[tube - 1] = {
+    ...s.tubes[tube - 1]!,
+    labelScannedAt: now,
+    labelScannedBy: actor,
+  };
+  const events: EventDraft[] = [
+    sampleEvent(s, "label_scanned", { label: labelFor(s.newId, tube) }, tube),
+  ];
+  if (!s.labeledAt && s.tubes.every((t) => t.labelScannedAt)) {
+    s.labeledAt = now;
+    s.labeledBy = actor;
+    events.push(sampleEvent(s, "sample_labeled", { byScan: true }));
+  }
+  return { sample: s, events };
+}
+
+export function labelScanRepeatEvent(sample: Sample, tube: number): EventDraft {
+  return sampleEvent(
+    sample,
+    "label_scan_repeated",
+    { label: labelFor(sample.newId, tube) },
+    tube,
+  );
 }
 
 /** Places a tube; marks pull and label as implied if nobody pressed them, and finishes the sample on its last tube. */
@@ -368,6 +468,7 @@ export function applyPlacement(
   }
   const previousStatus = s.tubes[tube - 1]?.status ?? "pending";
   s.tubes[tube - 1] = {
+    ...s.tubes[tube - 1],
     status: "placed",
     at: now,
     by: actor,
@@ -417,13 +518,14 @@ export function scanRepeatEvent(
 
 export function scanRejectEvent(
   label: string,
-  decision: Extract<ScanDecision, { kind: "reject" }>,
+  decision: { reason: ScanRejectReason; message: string },
   batchNumber: number,
   currentSample: Sample | null,
   labelSample: Sample | null,
+  type: "scan_rejected" | "label_scan_rejected" = "scan_rejected",
 ): EventDraft {
   return {
-    type: "scan_rejected",
+    type,
     batchNumber,
     sampleId: labelSample?.id ?? null,
     newId: labelSample?.newId ?? null,

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyLabelScan,
   applyPlacement,
   applySampleAction,
+  decideLabelScan,
   decideScan,
   type ScanInput,
 } from "@/lib/pipeline/actions";
@@ -314,5 +316,106 @@ describe("placing tubes", () => {
     expect(r.sample.finishedAt).toBe(T0);
     expect(r.events.map((e) => e.type)).toEqual(["tube_placed"]);
     expect(r.events[0]?.data).toMatchObject({ wasNotFilled: true });
+  });
+});
+
+describe("labeler scans", () => {
+  const current = makeSample({ newId: "S0066", originalId: "41540" });
+  const other = makeSample({ newId: "S0067" });
+  const byNewId: Record<string, Sample> = { S0066: current, S0067: other };
+
+  function labelScan(label: string, overrides: Partial<ScanInput> = {}) {
+    const parsed = parseLabel(label);
+    return decideLabelScan({
+      label,
+      parsed,
+      labelSample: parsed ? (byNewId[parsed.newId] ?? null) : null,
+      currentSample: current,
+      batchNumber: 1,
+      destCount: 3,
+      ...overrides,
+    });
+  }
+
+  it("records a label of the sample on screen", () => {
+    expect(labelScan("S0066-3")).toMatchObject({ kind: "record", tube: 3 });
+  });
+
+  it("rejects a label of another sample, naming the expected one", () => {
+    const d = labelScan("S0067-1");
+    expect(d).toMatchObject({ kind: "reject", reason: "wrong_sample" });
+    expect(d.kind === "reject" && d.message).toContain("S0066");
+  });
+
+  it("applies the shared checks: unreadable, unknown, tube number, batch", () => {
+    expect(labelScan("41540")).toMatchObject({ reason: "unreadable" });
+    expect(labelScan("S9999-1")).toMatchObject({ reason: "unknown" });
+    expect(labelScan("S0066-4")).toMatchObject({ reason: "bad_tube" });
+    expect(labelScan("S0066-1", { batchNumber: 2 })).toMatchObject({
+      reason: "other_batch",
+    });
+  });
+
+  it("repeats an already scanned label", () => {
+    const scanned = { ...current, tubes: current.tubes.map((t) => ({ ...t })) };
+    scanned.tubes[0] = {
+      ...scanned.tubes[0]!,
+      labelScannedAt: T0,
+      labelScannedBy: "Lee",
+    };
+    expect(labelScan("S0066-1", { labelSample: scanned })).toMatchObject({
+      kind: "repeat",
+    });
+  });
+
+  it("accepts any sample's label once the screen's sample is labeled", () => {
+    expect(
+      labelScan("S0067-1", { currentSample: { ...current, labeledAt: T0 } }),
+    ).toMatchObject({ kind: "record" });
+    expect(labelScan("S0067-1", { currentSample: null })).toMatchObject({
+      kind: "record",
+    });
+  });
+
+  it("marks the sample labeled when its last label is scanned", () => {
+    let s = makeSample();
+    s = applyLabelScan(s, 2, { now: T0, actor: "Lee" }).sample;
+    s = applyLabelScan(s, 1, { now: T0, actor: "Lee" }).sample;
+    expect(s.labeledAt).toBeNull();
+    const last = applyLabelScan(s, 3, { now: T1, actor: "Lee" });
+    expect(last.sample).toMatchObject({ labeledAt: T1, labeledBy: "Lee" });
+    expect(last.events.map((e) => [e.type, e.data])).toEqual([
+      ["label_scanned", { label: `${s.newId}-3` }],
+      ["sample_labeled", { byScan: true }],
+    ]);
+  });
+
+  it("does not relabel a sample someone already marked labeled", () => {
+    const s = makeSample({ labeledAt: T0, labeledBy: "Lee" });
+    let r = applyLabelScan(s, 1, { now: T1, actor: "Ali" });
+    r = applyLabelScan(r.sample, 2, { now: T1, actor: "Ali" });
+    r = applyLabelScan(r.sample, 3, { now: T1, actor: "Ali" });
+    expect(r.sample.labeledBy).toBe("Lee");
+    expect(r.events.map((e) => e.type)).toEqual(["label_scanned"]);
+  });
+
+  it("forgets label scans when the labels are undone", () => {
+    let s = makeSample({ labeledAt: T0 });
+    s = applyLabelScan(s, 1, { now: T0, actor: "Lee" }).sample;
+    const r = ok(
+      applySampleAction(s, { type: "undo_label", sampleId: "x" }, ctx),
+    );
+    expect(r.sample.tubes.every((t) => !t.labelScannedAt)).toBe(true);
+    expect(r.events[0]?.data).toMatchObject({ clearedLabelScans: 1 });
+  });
+
+  it("keeps a tube's label scan when the aliquoter places it", () => {
+    let s = makeSample({ pulledAt: T0 });
+    s = applyLabelScan(s, 1, { now: T0, actor: "Lee" }).sample;
+    s = applyPlacement(s, 1, placeCtx).sample;
+    expect(s.tubes[0]).toMatchObject({
+      status: "placed",
+      labelScannedBy: "Lee",
+    });
   });
 });

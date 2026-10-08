@@ -7,13 +7,17 @@ import type { ActionResponse, ChangeMessage } from "@/lib/api-types";
 import type { Db, Tx } from "@/lib/db";
 import { batches, events, jobs, samples, type JobRow } from "@/lib/db/schema";
 import {
+  applyLabelScan,
   applyPlacement,
   applySampleAction,
+  decideLabelScan,
   decideScan,
+  labelScanRepeatEvent,
   MAX_NOTE_LENGTH,
   scanRejectEvent,
   scanRepeatEvent,
   type Action,
+  type ScanInput,
 } from "@/lib/pipeline/actions";
 import { destinationFor } from "@/lib/pipeline/destination";
 import { parseLabel } from "@/lib/pipeline/labels";
@@ -55,7 +59,7 @@ const actionSchema = z.discriminatedUnion("type", [
     text: z.string().max(MAX_NOTE_LENGTH),
   }),
   z.object({
-    type: z.literal("scan"),
+    type: z.enum(["scan", "label_scan"]),
     label: z.string().max(200),
     currentSampleId: id.nullable(),
   }),
@@ -199,17 +203,18 @@ export async function performAction(
     };
     const action = request.action as Action;
 
-    if (action.type === "scan") {
-      return scan(
+    if (action.type === "scan" || action.type === "label_scan") {
+      const input = await loadScanInput(
         tx,
         job,
         participant,
         action.label,
         action.currentSampleId,
-        now,
-        actor,
-        meta,
       );
+      const context = { tx, job, participant, now, actor, meta };
+      return action.type === "scan"
+        ? scan(context, input)
+        : labelScan(context, input);
     }
 
     const sample = await loadSample(tx, job.id, action.sampleId);
@@ -250,16 +255,23 @@ export async function performAction(
   });
 }
 
-async function scan(
+interface ScanContext {
+  tx: Tx;
+  job: JobRow;
+  participant: Participant;
+  now: string;
+  actor: { participantId: string; name: string; role: string };
+  meta: { clientActionId: string; clientAt: string | null };
+}
+
+/** Looks up the sample a scanned label names and the station's current sample. */
+async function loadScanInput(
   tx: Tx,
   job: JobRow,
   participant: Participant,
   label: string,
   currentSampleId: string | null,
-  now: string,
-  actor: { participantId: string; name: string; role: string },
-  meta: { clientActionId: string; clientAt: string | null },
-): Promise<ActionResponse> {
+): Promise<ScanInput> {
   const parsed = parseLabel(label);
   let labelSample: Sample | null = null;
   if (parsed) {
@@ -273,14 +285,23 @@ async function scan(
   const currentSample = currentSampleId
     ? await loadSample(tx, job.id, currentSampleId)
     : null;
-  const decision = decideScan({
+  return {
     label,
     parsed,
     labelSample,
     currentSample,
     batchNumber: participant.batchNumber,
     destCount: job.destSets.length,
-  });
+  };
+}
+
+/** The aliquoter's scan: places a tube, repeats a placed one, or rejects. */
+async function scan(
+  { tx, job, participant, now, actor, meta }: ScanContext,
+  input: ScanInput,
+): Promise<ActionResponse> {
+  const { label, currentSample, labelSample } = input;
+  const decision = decideScan(input);
 
   if (decision.kind === "reject") {
     const draft = scanRejectEvent(
@@ -364,3 +385,88 @@ async function scan(
 }
 
 export type { ActionResponse, ChangeMessage };
+
+/** The labeler's scan: records a checked label; the sample's last one marks it labeled. */
+async function labelScan(
+  { tx, job, participant, now, actor, meta }: ScanContext,
+  input: ScanInput,
+): Promise<ActionResponse> {
+  const { label, currentSample, labelSample } = input;
+  const decision = decideLabelScan(input);
+
+  if (decision.kind === "reject") {
+    const draft = scanRejectEvent(
+      label,
+      decision,
+      participant.batchNumber,
+      currentSample,
+      labelSample,
+      "label_scan_rejected",
+    );
+    const committed = await commitChange(tx, job, actor, [draft], [], meta);
+    return {
+      ok: false,
+      version: committed.version,
+      samples: [],
+      events: committed.events,
+      labelScan: {
+        kind: "reject",
+        reason: decision.reason,
+        message: decision.message,
+      },
+    };
+  }
+
+  const { sample, tube } = decision;
+  const outcome = {
+    label: `${sample.newId}-${tube}`,
+    tube,
+    set: job.destSets[tube - 1] ?? `Set ${tube}`,
+  };
+
+  if (decision.kind === "repeat") {
+    const committed = await commitChange(
+      tx,
+      job,
+      actor,
+      [labelScanRepeatEvent(sample, tube)],
+      [],
+      meta,
+    );
+    return {
+      ok: true,
+      version: committed.version,
+      samples: [],
+      events: committed.events,
+      labelScan: {
+        kind: "repeat",
+        ...outcome,
+        sampleLabeled: sample.labeledAt !== null,
+      },
+    };
+  }
+
+  const recorded = applyLabelScan(sample, tube, {
+    now,
+    actor: participant.name,
+  });
+  const committed = await commitChange(
+    tx,
+    job,
+    actor,
+    recorded.events,
+    [recorded.sample],
+    meta,
+  );
+  return {
+    ok: true,
+    version: committed.version,
+    samples: [recorded.sample],
+    events: committed.events,
+    labelScan: {
+      kind: "record",
+      ...outcome,
+      sampleLabeled: recorded.sample.labeledAt !== null,
+    },
+  };
+}

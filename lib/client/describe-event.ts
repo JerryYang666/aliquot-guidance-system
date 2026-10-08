@@ -22,11 +22,18 @@ export function describeEvent(e: LogEvent): string {
     case "sample_pull_undone":
       return `undid the pull of ${id}`;
     case "sample_labeled":
+      if (d.byScan) return `labeled ${id} (all labels scanned)`;
       return d.impliedByScan
         ? `labeled ${id} (recorded by scan)`
         : `labeled ${id}`;
     case "sample_label_undone":
       return `undid the labels of ${id}`;
+    case "label_scanned":
+      return `checked label ${tube}`;
+    case "label_scan_repeated":
+      return `scanned label ${tube} again`;
+    case "label_scan_rejected":
+      return `label scan rejected: ${str(d.message)}`;
     case "sample_skipped":
       return `skipped ${id} for now`;
     case "tube_placed":
@@ -57,7 +64,7 @@ export function describeEvent(e: LogEvent): string {
 }
 
 export function isProblem(e: LogEvent): boolean {
-  return e.type === "scan_rejected";
+  return e.type === "scan_rejected" || e.type === "label_scan_rejected";
 }
 
 export function formatTime(iso: string, withMs = false): string {

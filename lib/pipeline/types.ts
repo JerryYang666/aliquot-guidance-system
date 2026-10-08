@@ -17,9 +17,13 @@ export const ROLE_LABELS: Record<Role, string> = {
 export type TubeStatus = "pending" | "placed" | "not_filled";
 
 export interface TubeState {
+  /** Where the aliquot stands: set by the aliquoter's scan or by finishing the sample. */
   status: TubeStatus;
   at: string | null;
   by: string | null;
+  /** When the labeler scanned this tube's new label, if they did. */
+  labelScannedAt?: string | null;
+  labelScannedBy?: string | null;
 }
 
 export interface Note {
@@ -87,6 +91,9 @@ export type EventType =
   | "sample_pull_undone"
   | "sample_labeled"
   | "sample_label_undone"
+  | "label_scanned"
+  | "label_scan_repeated"
+  | "label_scan_rejected"
   | "sample_skipped"
   | "tube_placed"
   | "tube_undone"
