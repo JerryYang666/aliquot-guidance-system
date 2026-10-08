@@ -1,8 +1,11 @@
 # The realtime relay behind Caddy, which obtains and renews the TLS
-# certificate for RELAY_DOMAIN automatically. See docs/deploy.md.
+# certificate for RELAY_DOMAIN automatically. The relay image is built and
+# published by CI on every push to main; this host only pulls it.
+# See docs/deploy.md.
 services:
   relay:
-    build: ../../realtime
+    image: ghcr.io/jerryyang666/aliquot-guidance-system/realtime:${RELAY_TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
     environment:
       RELAY_SECRET: ${RELAY_SECRET:?set RELAY_SECRET in .env}
