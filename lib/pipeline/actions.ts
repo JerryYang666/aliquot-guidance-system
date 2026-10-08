@@ -26,7 +26,6 @@ export interface ScanAction {
   label: string;
   /** The sample the aliquoter's screen shows as current, or null when waiting. */
   currentSampleId: string | null;
-  batchNumber: number;
 }
 
 export type Action = SampleAction | ScanAction;

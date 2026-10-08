@@ -21,7 +21,7 @@ export function relayConfig(): {
   internalUrl: string;
   secret: Uint8Array;
 } | null {
-  const publicUrl = process.env.NEXT_PUBLIC_RELAY_URL;
+  const publicUrl = process.env.RELAY_PUBLIC_URL;
   const internalUrl =
     process.env.RELAY_INTERNAL_URL ?? publicUrl?.replace(/^ws/, "http");
   if (!publicUrl || !internalUrl || !process.env.RELAY_SECRET) return null;
