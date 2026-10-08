@@ -108,31 +108,39 @@ export function StationHeader({
     `/api/jobs/${job.code}/export?format=${format}&t=${encodeURIComponent(token)}`;
 
   const RoleIcon = ROLE_ICONS[me.role];
+  const station = `Batch ${batch.number} · Box ${batch.boxNumber}`;
 
-  // The role is the largest thing in the header: it is what tells one
-  // station's screen from another's. On a phone the batch, name and job
-  // drop to a line of their own below it.
+  // What tells one station's screen from another's is largest: the role,
+  // then the batch and its box. On a wide screen they share the first line;
+  // on a narrow one the batch and box drop to the second.
   return (
     <header className="sticky top-0 z-30 bg-slate-900 text-white">
       <div className="mx-auto grid max-w-7xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-2">
-        <span className="flex size-9 items-center justify-center rounded-lg bg-white text-slate-900 sm:row-span-2 sm:size-12 sm:rounded-xl">
-          <RoleIcon className="size-5 sm:size-7" />
+        <span className="flex size-9 items-center justify-center rounded-lg bg-white text-slate-900 md:row-span-2 md:size-12 md:rounded-xl">
+          <RoleIcon className="size-5 md:size-7" />
         </span>
-        <div className="truncate text-2xl leading-tight font-bold tracking-tight sm:text-3xl">
-          {ROLE_LABELS[me.role]}
-        </div>
-        <div className="col-span-3 row-start-2 mt-1 truncate text-sm text-slate-300 sm:col-span-1 sm:col-start-2 sm:mt-0">
-          <span className="font-semibold text-white">Batch {batch.number}</span>
-          <span className="text-slate-400"> (box {batch.boxNumber})</span>
-          {" · "}
-          {me.name}
-          {" · "}
-          {job.name}
-          <span className="ml-2 hidden font-mono text-xs text-slate-400 sm:inline">
-            {formatJobCode(job.code)}
+        <div className="flex min-w-0 items-baseline gap-x-4 leading-tight font-bold tracking-tight">
+          <span className="truncate text-2xl md:text-3xl">
+            {ROLE_LABELS[me.role]}
+          </span>
+          <span className="hidden shrink-0 text-2xl text-slate-200 md:inline">
+            {station}
           </span>
         </div>
-        <div className="col-start-3 row-start-1 flex items-center gap-3 sm:row-span-2">
+        <div className="col-span-3 row-start-2 mt-1 flex min-w-0 items-baseline gap-x-2 md:col-span-1 md:col-start-2 md:mt-0">
+          <span className="shrink-0 text-xl leading-tight font-bold tracking-tight md:hidden">
+            {station}
+          </span>
+          <span className="truncate text-sm text-slate-300">
+            {me.name}
+            {" · "}
+            {job.name}
+            <span className="ml-2 hidden font-mono text-xs text-slate-400 md:inline">
+              {formatJobCode(job.code)}
+            </span>
+          </span>
+        </div>
+        <div className="col-start-3 row-start-1 flex items-center gap-3 md:row-span-2">
           <ConnectionPill connection={connection} />
           <WakePill state={wake} />
           <div className="relative">
