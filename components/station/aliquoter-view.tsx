@@ -557,9 +557,10 @@ function ScanResult({
       </div>
     );
   }
-  const dests = result.tubes.map((n) =>
-    destinationFor(destSets, result.box, result.slot, n),
-  );
+  // In set order, as the boxes stand; the label below names the one scanned.
+  const dests = [...result.tubes]
+    .sort((a, b) => a - b)
+    .map((n) => destinationFor(destSets, result.box, result.slot, n));
   const color = setColor(result.tubes[0] ?? 0);
   const repeat = result.kind === "repeat";
   // One scan placed several tubes: they share the slot, each in its own set's box.
@@ -591,7 +592,7 @@ function ScanResult({
                 <span
                   key={d.tube}
                   className={cx(
-                    "rounded-lg px-2 py-0.5 text-2xl font-black uppercase",
+                    "rounded-lg px-2 py-0.5 text-xl font-black uppercase",
                     setColor(d.tube).solid,
                   )}
                 >
