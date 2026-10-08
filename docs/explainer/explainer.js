@@ -430,8 +430,15 @@
       o > 0.01 ? `rgba(254,243,199,${(o * 0.8).toFixed(3)})` : el._bg;
   }
 
-  const logoSVG = (px) =>
-    `<svg width="${px}" height="${px}" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#0f172a"/><path d="M13 6h6v3h-1v13a2 2 0 0 1-4 0V9h-1z" fill="#fff"/><rect class="bar" x="6" y="20" width="4" height="7" rx="1.5" fill="#60a5fa"/><rect class="bar" x="14" y="24" width="4" height="3" rx="1" fill="#34d399"/><rect class="bar" x="22" y="20" width="4" height="7" rx="1.5" fill="#a78bfa"/></svg>`;
+  /**
+   * The app's icon (app/icon.svg): a tilted test tube on a dark tile. Its
+   * liquid shows up to the `.liquid-top` rectangle's y, which the title
+   * animates from 25.5 (empty) to 15.5 (as drawn).
+   */
+  const logoSVG = (px) => {
+    const id = `logo${uid++}`;
+    return `<svg width="${px}" height="${px}" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#0f172a"/><g transform="translate(-1.5 1.5) rotate(40 16 16)"><clipPath id="${id}"><rect class="liquid-top" x="12" y="15.5" width="8" height="12"/></clipPath><path d="M13 15.5h6V22a3 3 0 0 1-6 0z" fill="#60a5fa" clip-path="url(#${id})"/><path d="M12 7v15a4 4 0 0 0 8 0V7M10 6h12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></svg>`;
+  };
 
   // ------------------------------------------------------ the app's screens
 
@@ -561,7 +568,7 @@
         root,
         `<div class="abs" style="width:220px;height:220px">${logoSVG(220)}</div>`,
       );
-      r.bars = [...r.logo.querySelectorAll(".bar")];
+      r.liquid = r.logo.querySelector(".liquid-top");
       r.title = add(
         root,
         `<div class="abs" style="font-size:120px;font-weight:800;letter-spacing:-0.045em">Aliquot Guide</div>`,
@@ -578,17 +585,8 @@
     render(t, T, r) {
       const k = p(t, 0.15, 0.7, ease.back);
       place(r.logo, { x: 960, y: 330, s: lerp(0.6, 1, k), o: p(t, 0.15, 0.4) });
-      const full = [
-        [20, 7],
-        [24, 3],
-        [20, 7],
-      ];
-      r.bars.forEach((bar, i) => {
-        const g = p(t, 0.7 + i * 0.15, 0.6, ease.out);
-        const [y, h] = full[i];
-        bar.setAttribute("y", (y + h * (1 - g)).toFixed(2));
-        bar.setAttribute("height", Math.max(0.01, h * g).toFixed(2));
-      });
+      const fill = p(t, 0.7, 0.9, ease.out);
+      r.liquid.setAttribute("y", lerp(25.5, 15.5, fill).toFixed(2));
       place(r.title, {
         x: 960,
         y: lerp(560, 540, p(t, 0.9, 0.8)),
@@ -2059,11 +2057,13 @@
       const current = (s) => `
         <div class="lbl">Check the source tube</div>
         <div class="mono big-id" style="display:inline-block;font-size:60px;font-weight:700;letter-spacing:-0.03em;line-height:1.1;padding:0 6px;margin-left:-6px">${s.originalId}</div>
-        <div style="color:#475569;font-size:15px">New ID <b class="mono">${s.newId}</b> · slot <b class="mono">${s.slot}</b></div>
+        <div class="row" style="gap:32px;margin-top:10px;align-items:flex-start">
+          <div><div style="font-size:14px;color:#64748b">New ID</div><div class="mono" style="font-size:48px;font-weight:700;letter-spacing:-0.025em;line-height:1">${s.newId}</div></div>
+          <div><div style="font-size:14px;color:#64748b">Slot</div><div class="mono" style="font-size:48px;font-weight:700;letter-spacing:-0.025em;line-height:1">${s.slot}</div></div>
+        </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px">
           ${[1, 2, 3].map((k) => `<div class="tube-chip set-${k} pending ali-chip" style="padding:10px"><div class="row mono" style="justify-content:space-between;font-size:17px;font-weight:700">-${k}<span class="chk" style="opacity:0">${icon("check", 18, 3)}</span></div><div style="font-size:13px">${SETS[k - 1]}</div><div style="font-size:11px;opacity:0.8">box 1 · ${s.slot}</div></div>`).join("")}
-        </div>
-        <div class="row" style="gap:8px;margin-top:12px"><div class="btn secondary md">Finish sample…</div><div class="btn md" style="color:#334155">${icon("message-square-plus", 16)} Note</div></div>`;
+        </div>`;
       const result = (
         k,
       ) => `<div class="res res-${k} set-${k} solid" style="position:absolute;inset:0;border-radius:16px;padding:16px;opacity:0">
@@ -2075,7 +2075,7 @@
         </div>`;
       const app = `${stationHeader("aliquoter", "Jun", { phone: true })}
         <div style="padding:10px;display:flex;flex-direction:column;gap:10px">
-          <div class="cam" style="position:relative;height:250px;border-radius:16px;overflow:hidden;background:radial-gradient(120% 90% at 50% 40%, #1e293b, #020617)">
+          <div class="cam" style="position:relative;height:196px;border-radius:16px;overflow:hidden;background:radial-gradient(120% 90% at 50% 40%, #1e293b, #020617)">
             <div class="cam-idle fill col" style="align-items:center;justify-content:center;gap:12px;color:#fff;text-align:center;padding:16px"><div style="font-size:13px;color:#cbd5e1">Hold each new tube's label in the frame. The camera stays on.</div><div class="btn primary start-cam" style="height:44px;font-size:15px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.25)">${icon("camera", 18)} Start camera</div></div>
             <div class="cam-on fill" style="opacity:0">
               <div class="cam-label" style="position:absolute;left:50%;top:50%;width:180px;height:112px;margin:-56px 0 0 -90px"></div>
@@ -2083,12 +2083,12 @@
               <div style="position:absolute;left:8px;top:8px;display:flex;gap:4px;align-items:center;padding:3px 8px;border-radius:99px;background:rgba(0,0,0,0.6);color:#fff;font-size:11px">${icon("scan-line", 13)} Scanning</div>
             </div>
           </div>
-          <div style="position:relative;height:196px">
+          <div style="position:relative;height:190px">
             <div class="res-empty fill" style="border-radius:16px;border:2px dashed #cbd5e1;display:grid;place-items:center;color:#64748b;font-size:15px">Scan a tube to see where it goes.</div>
             ${[1, 2, 3].map(result).join("")}
             <div class="res res-bad" style="position:absolute;inset:0;border-radius:16px;padding:16px;background:#dc2626;color:#fff;opacity:0"><div class="row" style="gap:8px;font-size:21px;font-weight:800">${icon("x", 26, 3)} Wrong tube — do not place it</div><div style="margin-top:8px;font-size:16px;line-height:1.35"><span class="mono">S0068-1</span> is not for the current tube <span class="mono">S0067</span> (<span class="mono">41541</span>).</div></div>
           </div>
-          <div class="card" style="position:relative;height:262px;padding:14px">
+          <div class="card" style="position:relative;height:290px;padding:14px">
             <div class="fill ca" style="padding:14px">${current(S66)}</div>
             <div class="fill cb" style="padding:14px">${current(S67)}</div>
           </div>
