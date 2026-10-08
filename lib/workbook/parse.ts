@@ -1,4 +1,4 @@
-import ExcelJS from "exceljs";
+import readExcelFile from "read-excel-file/universal";
 
 import {
   checkWorkbook,
@@ -35,45 +35,36 @@ const HEADERS: Record<Field, string[]> = {
 };
 const REQUIRED: Field[] = ["sourceBox", "originalId", "slot", "newId"];
 
-/** Plain text of any ExcelJS cell value (numbers, rich text, formulas, links). */
-export function cellText(value: ExcelJS.CellValue): string {
-  if (value === null || value === undefined) return "";
+/** One worksheet as rows of cells, laid out as in the file (blank rows kept). */
+interface Sheet {
+  name: string;
+  rows: readonly (readonly unknown[])[];
+}
+
+/** Plain text of a cell (strings, numbers, booleans, dates; formulas arrive as their result). */
+export function cellText(value: unknown): string {
   if (typeof value === "string") return value.trim();
   if (typeof value === "number" || typeof value === "boolean")
     return String(value);
   if (value instanceof Date) return value.toISOString();
-  if ("richText" in value)
-    return value.richText
-      .map((r) => r.text)
-      .join("")
-      .trim();
-  if ("text" in value && typeof value.text === "string")
-    return value.text.trim();
-  if (
-    "result" in value &&
-    value.result !== undefined &&
-    typeof value.result !== "object"
-  ) {
-    return String(value.result).trim();
-  }
   return "";
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
 
-function rowTexts(sheet: ExcelJS.Worksheet, rowNumber: number): string[] {
-  const row = sheet.getRow(rowNumber);
+/** A row's cell texts, indexed from 1 like spreadsheet columns (A = 1). */
+function rowTexts(sheet: Sheet, rowNumber: number): string[] {
+  const row = sheet.rows[rowNumber - 1] ?? [];
   const texts: string[] = [];
-  for (let c = 1; c <= sheet.columnCount; c++)
-    texts[c] = cellText(row.getCell(c).value);
+  for (let c = 1; c <= row.length; c++) texts[c] = cellText(row[c - 1]);
   return texts;
 }
 
 /** Finds the header row of a pull list: one naming both "New ID" and "Original ID". */
 function findHeader(
-  sheet: ExcelJS.Worksheet,
+  sheet: Sheet,
 ): { row: number; columns: Partial<Record<Field, number>> } | null {
-  for (let r = 1; r <= Math.min(sheet.rowCount, 15); r++) {
+  for (let r = 1; r <= Math.min(sheet.rows.length, 15); r++) {
     const texts = rowTexts(sheet, r).map((t) => (t ? norm(t) : ""));
     if (!texts.includes("new id") || !texts.includes("original id")) continue;
     const columns: Partial<Record<Field, number>> = {};
@@ -94,10 +85,10 @@ function findHeader(
   return null;
 }
 
-function batchNumberOf(sheet: ExcelJS.Worksheet): number | null {
+function batchNumberOf(sheet: Sheet): number | null {
   const fromName = /^b(?:atch)?\s*0*(\d+)/i.exec(sheet.name.trim());
   if (fromName?.[1]) return Number(fromName[1]);
-  const title = cellText(sheet.getRow(1).getCell(1).value);
+  const title = cellText(sheet.rows[0]?.[0]);
   const fromTitle = /batch\s*0*(\d+)/i.exec(title);
   return fromTitle?.[1] ? Number(fromTitle[1]) : null;
 }
@@ -106,19 +97,19 @@ function batchNumberOf(sheet: ExcelJS.Worksheet): number | null {
  * Reads the overview's "Boxes to fill" column ("Ship 1, Keep2 1, Keep3 1"):
  * the destination set names and each batch's box number.
  */
-function readOverview(workbook: ExcelJS.Workbook): {
+function readOverview(sheets: Sheet[]): {
   destSets: string[] | null;
   boxNumbers: Map<number, number>;
 } {
   const boxNumbers = new Map<number, number>();
   let destSets: string[] | null = null;
-  for (const sheet of workbook.worksheets) {
-    for (let r = 1; r <= Math.min(sheet.rowCount, 15); r++) {
+  for (const sheet of sheets) {
+    for (let r = 1; r <= Math.min(sheet.rows.length, 15); r++) {
       const texts = rowTexts(sheet, r).map((t) => (t ? norm(t) : ""));
       const batchCol = texts.indexOf("batch");
       const boxesCol = texts.indexOf("boxes to fill");
       if (batchCol < 1 || boxesCol < 1) continue;
-      for (let rr = r + 1; rr <= sheet.rowCount; rr++) {
+      for (let rr = r + 1; rr <= sheet.rows.length; rr++) {
         const row = rowTexts(sheet, rr);
         const batch = Number(row[batchCol]);
         const boxes = (row[boxesCol] ?? "")
@@ -140,9 +131,12 @@ function readOverview(workbook: ExcelJS.Workbook): {
 export async function parseWorkbook(data: ArrayBuffer): Promise<ParseResult> {
   const errors: string[] = [];
   const warnings: string[] = [];
-  const workbook = new ExcelJS.Workbook();
+  let sheets: Sheet[];
   try {
-    await workbook.xlsx.load(data as unknown as ExcelJS.Buffer);
+    sheets = (await readExcelFile(data)).map((s) => ({
+      name: s.sheet,
+      rows: s.data,
+    }));
   } catch {
     return {
       workbook: null,
@@ -151,10 +145,10 @@ export async function parseWorkbook(data: ArrayBuffer): Promise<ParseResult> {
     };
   }
 
-  const overview = readOverview(workbook);
+  const overview = readOverview(sheets);
   const batches: ParsedBatch[] = [];
 
-  for (const sheet of workbook.worksheets) {
+  for (const sheet of sheets) {
     const header = findHeader(sheet);
     if (!header) continue;
     const missing = REQUIRED.filter((f) => !header.columns[f]);
@@ -173,7 +167,7 @@ export async function parseWorkbook(data: ArrayBuffer): Promise<ParseResult> {
     }
 
     const samples: ParsedSample[] = [];
-    for (let r = header.row + 1; r <= sheet.rowCount; r++) {
+    for (let r = header.row + 1; r <= sheet.rows.length; r++) {
       const texts = rowTexts(sheet, r);
       const get = (f: Field) => {
         const c = header.columns[f];

@@ -94,7 +94,7 @@ refetch.
 ## 4. App on Vercel
 
 1. Import the repository in Vercel. The defaults (Next.js, `npm run build`)
-   are right; use Node.js 22.
+   are right; use Node.js 24 (`package.json` pins it with `engines`).
 2. Environment variables (Production, and Preview if wanted):
 
    | Variable             | Value                            |

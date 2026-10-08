@@ -34,5 +34,7 @@ export default defineConfig([
     "next-env.d.ts",
     "public/**",
     "realtime/**",
+    // Local throwaway files; gitignored.
+    "scratch/**",
   ]),
 ]);

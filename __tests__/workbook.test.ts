@@ -1,5 +1,5 @@
-import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
+import writeExcelFile, { type Sheet } from "write-excel-file/universal";
 
 import { renderStatement } from "@/lib/jobs/render-sql";
 import { parseWorkbook } from "@/lib/workbook/parse";
@@ -31,35 +31,45 @@ type Row = [
 async function makeWorkbook(options: {
   pulls: Record<string, Row[]>;
   overview?: boolean;
-}) {
-  const wb = new ExcelJS.Workbook();
+}): Promise<ArrayBuffer> {
+  const sheets: Sheet<Blob>[] = [];
   if (options.overview ?? true) {
-    const o = wb.addWorksheet("Overview");
-    o.getRow(1).getCell(1).value = "Aliquot batches";
-    o.getRow(3).values = ["Batch", "New IDs", "Samples", "Boxes to fill"];
-    o.getRow(4).values = [1, "S0001 - S0002", 2, "Ship 1, Keep2 1, Keep3 1"];
-    o.getRow(5).values = [2, "S0003 - S0003", 1, "Ship 7, Keep2 7, Keep3 7"];
-  }
-  for (const [name, rows] of Object.entries(options.pulls)) {
-    const grid = wb.addWorksheet(name.replace("pull", "grid"));
-    grid.getRow(1).getCell(1).value = "1) TUBE LABELS (new ID)";
-    const s = wb.addWorksheet(name);
-    s.getRow(1).getCell(1).value = `Batch pull list`;
-    s.getRow(3).values = PULL_HEADER;
-    rows.forEach((r, i) => {
-      s.getRow(4 + i).values = [
-        null,
-        r[0],
-        r[1],
-        r[2],
-        r[3],
-        r[4],
-        r[5],
-        r[6] ?? null,
-      ];
+    sheets.push({
+      sheet: "Overview",
+      data: [
+        ["Aliquot batches"],
+        [],
+        ["Batch", "New IDs", "Samples", "Boxes to fill"],
+        [1, "S0001 - S0002", 2, "Ship 1, Keep2 1, Keep3 1"],
+        [2, "S0003 - S0003", 1, "Ship 7, Keep2 7, Keep3 7"],
+      ],
     });
   }
-  return (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+  for (const [name, rows] of Object.entries(options.pulls)) {
+    sheets.push({
+      sheet: name.replace("pull", "grid"),
+      data: [["1) TUBE LABELS (new ID)"]],
+    });
+    sheets.push({
+      sheet: name,
+      data: [
+        ["Batch pull list"],
+        [],
+        PULL_HEADER,
+        ...rows.map((r) => [
+          null,
+          r[0],
+          r[1],
+          r[2],
+          r[3],
+          r[4],
+          r[5],
+          r[6] ?? null,
+        ]),
+      ],
+    });
+  }
+  return (await writeExcelFile(sheets).toBlob()).arrayBuffer();
 }
 
 describe("workbook parser", () => {
