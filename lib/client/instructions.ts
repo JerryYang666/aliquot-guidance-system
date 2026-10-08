@@ -56,6 +56,7 @@ export const INSTRUCTIONS: Record<Language, Instructions> = {
           "Aliquot it into its three labeled tubes.",
           "Tap “Start camera”, then scan each of the three tubes. After each scan, the screen shows which box and slot that tube goes in.",
           "After the third scan, the screen moves to the next tube. Hand the source tube back to the Puller.",
+          "Working alone, with no Puller or Labeler? Pull the tube and stick on its labels yourself, then scan as above. The first scan starts the sample and counts it as pulled and labeled.",
         ],
       },
       overview: {
@@ -100,6 +101,7 @@ export const INSTRUCTIONS: Record<Language, Instructions> = {
           "把样本分装到对应的三支已贴标签的管里。",
           "点 “Start camera”，逐支扫描这三支管。每扫一支，屏幕会显示它该放进哪个盒子的哪个位置。",
           "扫完第三支，屏幕会跳到下一管。把样本管还给取管员。",
+          "如果只有你一个人，没有取管员（Puller）和贴标员（Labeler）：自己取出样本管、贴好标签，然后照上面的步骤扫描。扫第一支管就会开始这个样本，并记为已取管、已贴标。",
         ],
       },
       overview: {

@@ -282,6 +282,67 @@ describe.skipIf(!url)("pipeline against Postgres", () => {
     ]);
   });
 
+  it("lets an Aliquoter work a batch alone, starting each sample with a scan", async () => {
+    // Nobody pulls or labels batch 2: its Aliquoter does it all and only
+    // scans. With no sample under way, the first scan starts one and
+    // records it as pulled and labeled; its other tubes finish it.
+    const db = mod.db.getDb();
+    const job = await mod.jobs.getJobByCode(db, code);
+    const sol = await mod.participants.joinJob(
+      db,
+      job.id,
+      { name: "Sol", role: "aliquoter", batchNumber: 2 },
+      "vitest",
+    );
+    const scan = (label: string, currentSampleId: string | null) =>
+      mod.actions.performAction(db, sol.participant, {
+        clientActionId: actionId(),
+        clientAt: new Date().toISOString(),
+        action: { type: "scan", label, currentSampleId },
+      });
+    const s = await sample("S0101");
+    expect(s.pulledAt).toBeNull();
+    expect(s.labeledAt).toBeNull();
+
+    const first = await scan("S0101-2", null);
+    expect(first.scan).toMatchObject({
+      kind: "place",
+      destination: { set: "Keep2", box: 2, slot: "A1" },
+      sampleFinished: false,
+    });
+    expect(first.events.map((e) => [e.type, e.data])).toEqual([
+      ["sample_pulled", { impliedByScan: true }],
+      ["sample_labeled", { impliedByScan: true }],
+      ["tube_placed", expect.objectContaining({ label: "S0101-2" })],
+    ]);
+
+    // The sample is now the screen's current one, so its other tubes go
+    // in, and the last one finishes it.
+    expect((await scan("S0101-1", s.id)).scan).toMatchObject({
+      kind: "place",
+      sampleFinished: false,
+    });
+    const last = await scan("S0101-3", s.id);
+    expect(last.scan).toMatchObject({
+      kind: "place",
+      destination: { set: "Keep3", box: 2, slot: "A1" },
+      sampleFinished: true,
+    });
+
+    const done = await sample("S0101");
+    expect([done.pulledBy, done.labeledBy, done.finishedBy]).toEqual([
+      "Sol",
+      "Sol",
+      "Sol",
+    ]);
+    expect(done.tubes.map((t) => t.status)).toEqual([
+      "placed",
+      "placed",
+      "placed",
+    ]);
+    await mod.participants.leaveJob(db, sol.participant);
+  });
+
   it("lets one person hold each working role on a batch while others wait", async () => {
     const db = mod.db.getDb();
     const job = await mod.jobs.getJobByCode(db, code);

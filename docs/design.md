@@ -29,6 +29,17 @@ touch the screen during normal flow; buttons exist for exceptions.
 
 One person can work several roles by opening one browser tab per role.
 
+**Working alone.** One person can also do a batch alone, as its Aliquoter
+and nothing else: they pull each source tube and stick on its labels
+themselves, then only scan. The Aliquoter is the last step, so a scan
+stands for the steps before it. With no sample under way, the first scan of
+any tube in the batch starts that sample and records it as pulled and
+labeled, logged as implied by the scan (see
+[What a scan does](#what-a-scan-does)). The screen shows the tube's box and
+slot, and the sample's other tubes finish it. Returning the source tube is
+still the Puller's to confirm, so working alone, finished samples stay on
+the return list.
+
 ## Jobs, codes, and identity — no accounts
 
 The home page offers **Create a job** or **Join a job**. Operators have no
