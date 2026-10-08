@@ -15,7 +15,7 @@ instructions say (`lib/client/instructions.ts`).
 | Getting started   | QR code or job code, name, batch, role, the instructions, Start               |
 | Puller            | Find the tube, hand it over, Space; put returned tubes back, Enter            |
 | Labeler           | Find the three labels, stick them on, Space or scan, hand them over           |
-| Aliquoter         | Check the ID, aliquot, scan and place each tube, hand the original back       |
+| Aliquoter         | Check both IDs, aliquot, scan and place each tube, hand the original back     |
 | Behind the scenes | The server, the append-only log, Undo and Skip, Overview                      |
 | Recap             | Each role in four lines                                                       |
 

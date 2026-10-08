@@ -1985,7 +1985,8 @@
 
   // 8. The aliquoter.
   const ALIQUOTER_STEPS = [
-    ["check", 1, "Check the ID on the tube."],
+    ["check", 1, "Check the original tube's ID."],
+    ["checknew", 1, "Check the new tubes' ID too."],
     ["fill", 2, "Aliquot into the three tubes."],
     ["scan", 3, "Scan a tube. Place it where shown."],
     ["rest", 3, "Scan and place the other two."],
@@ -1998,12 +1999,17 @@
       { id: "intro", say: "If you're the Aliquoter:", min: 3 },
       {
         id: "check",
-        say: "Take the original tube from the Puller, and check that its ID matches the big number on your screen.",
+        say: "Take the original tube from the Puller, and check that its number matches the big number on your screen.",
+        min: 5.5,
+      },
+      {
+        id: "checknew",
+        say: "Then check that the labels on the three new tubes match the new ID on your screen.",
         min: 5.5,
       },
       {
         id: "fill",
-        say: "Aliquot it into the three labeled tubes.",
+        say: "Only then, aliquot it into those three tubes.",
         min: 5.2,
       },
       {
@@ -2031,6 +2037,8 @@
       const T = roleTimes(ctx, this.beats);
       const { at, cue } = ctx;
       T.match = cue("check", "matches") + 0.1;
+      T.newIn = at("checknew") + 0.2;
+      T.match2 = cue("checknew", "match") + 0.1;
       T.pip = at("fill") + 0.5;
       T.cam = at("scan") + 0.3;
       T.scan = [
@@ -2058,7 +2066,7 @@
         <div class="lbl">Check the source tube</div>
         <div class="mono big-id" style="display:inline-block;font-size:60px;font-weight:700;letter-spacing:-0.03em;line-height:1.1;padding:0 6px;margin-left:-6px">${s.originalId}</div>
         <div class="row" style="gap:32px;margin-top:10px;align-items:flex-start">
-          <div><div style="font-size:14px;color:#64748b">New ID</div><div class="mono" style="font-size:48px;font-weight:700;letter-spacing:-0.025em;line-height:1">${s.newId}</div></div>
+          <div class="new-id" style="padding:2px 6px;margin:-2px -6px"><div style="font-size:14px;color:#64748b">New ID</div><div class="mono" style="font-size:48px;font-weight:700;letter-spacing:-0.025em;line-height:1">${s.newId}</div></div>
           <div><div style="font-size:14px;color:#64748b">Slot</div><div class="mono" style="font-size:48px;font-weight:700;letter-spacing:-0.025em;line-height:1">${s.slot}</div></div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px">
@@ -2097,6 +2105,7 @@
       r.ca = r.phone.querySelector(".ca");
       r.cb = r.phone.querySelector(".cb");
       r.bigId = r.ca.querySelector(".big-id");
+      r.newId = r.ca.querySelector(".new-id");
       r.chips = [...r.ca.querySelectorAll(".ali-chip")];
       r.cam = r.phone.querySelector(".cam");
       r.camIdle = r.phone.querySelector(".cam-idle");
@@ -2132,19 +2141,26 @@
         root,
         `<div class="abs callout mono" style="font-size:34px">41540</div>`,
       );
-      r.match = add(
+      r.newChip = add(
         root,
-        `<div class="abs chip" style="background:#047857;color:#fff;font-size:26px">${icon("check", 28, 3)} Match</div>`,
+        `<div class="abs callout mono" style="font-size:34px">S0066</div>`,
+      );
+      [r.match, r.match2] = [0, 1].map(() =>
+        add(
+          root,
+          `<div class="abs chip" style="background:#047857;color:#fff;font-size:26px">${icon("check", 28, 3)} Match</div>`,
+        ),
       );
       r.puller = roleChip(root, "puller");
       r.tap = ripple(root);
       r.svg = add(
         root,
-        `<svg class="abs" width="${W}" height="${H}" style="overflow:visible"><path class="link" fill="none" stroke="#f59e0b" stroke-width="4" stroke-dasharray="10 10" stroke-linecap="round"/></svg>`,
+        `<svg class="abs" width="${W}" height="${H}" style="overflow:visible"><path class="link" fill="none" stroke="#f59e0b" stroke-width="4" stroke-dasharray="10 10" stroke-linecap="round"/><path class="link2" fill="none" stroke="#f59e0b" stroke-width="4" stroke-dasharray="10 10" stroke-linecap="round"/></svg>`,
       );
       r.svg._w = W;
       r.svg._h = H;
       r.link = r.svg.querySelector(".link");
+      r.link2 = r.svg.querySelector(".link2");
       r.cross = add(
         root,
         `<div class="abs" style="width:84px;height:84px;border-radius:50%;background:#dc2626;color:#fff;display:grid;place-items:center;box-shadow:0 10px 30px -10px rgba(220,38,38,0.8)">${icon("x", 52, 3.5)}</div>`,
@@ -2170,9 +2186,10 @@
         y: lerp(srcY, pullerAt.y + 70, leave),
         s: lerp(1.3, 0.55, leave),
       };
+      const dim = 1 - 0.7 * vis(t, T["@checknew"], T["/checknew"] + 0.2);
       place(r.src, {
         ...srcPos,
-        o: Math.min(arrive, 1 - p(t, T.giveBack + 0.8, 0.3)),
+        o: Math.min(arrive, 1 - p(t, T.giveBack + 0.8, 0.3)) * dim,
       });
       const big = rel(r.bigId);
       highlight(r.bigId, vis(t, T.match - 0.6, T["/check"] + 0.2));
@@ -2196,9 +2213,36 @@
         s: lerp(0.7, 1, p(t, T.match, 0.4, ease.back)),
       });
 
-      // Step 2: pipette into the three tubes.
       const tubeX = [1060, 1200, 1340];
       const tubeY = 600;
+
+      // Step 1 again: the new tubes' labels match the new ID on screen.
+      const nid = rel(r.newId);
+      highlight(r.newId, vis(t, T.match2 - 0.6, T["/checknew"] + 0.2));
+      place(r.newChip, {
+        x: tubeX[1],
+        y: tubeY - 230,
+        o: vis(t, T.newIn + 0.6, T["/checknew"] + 0.2),
+        s: lerp(0.8, 1, p(t, T.newIn + 0.6, 0.4, ease.back)),
+      });
+      r.link2.setAttribute(
+        "d",
+        `M${tubeX[1] - 90} ${tubeY - 230} C ${tubeX[1] - 400} ${tubeY - 260}, ${nid.x + nid.w + 200} ${nid.cy}, ${nid.x + nid.w + 14} ${nid.cy}`,
+      );
+      r.link2.style.opacity = String(
+        vis(t, T.match2 - 0.5, T["/checknew"] + 0.2),
+      );
+      r.link2.style.strokeDashoffset = String(-t * 30);
+      // On the line, between the phone and the (dimmed) original tube.
+      const on = r.link2.getPointAtLength(r.link2.getTotalLength() * 0.62);
+      place(r.match2, {
+        x: on.x,
+        y: on.y,
+        o: vis(t, T.match2, T["/checknew"] + 0.2),
+        s: lerp(0.7, 1, p(t, T.match2, 0.4, ease.back)),
+      });
+
+      // Step 2: pipette into the three tubes.
       const cycle = 1.15;
       let srcLevel = 0.82;
       const levels = [0, 0, 0];
@@ -2255,7 +2299,7 @@
       tap(r.tap, t, T.cam, sc.cx, sc.cy);
       r.news.forEach((tb, k) => {
         tb.level(levels[k]);
-        const appear = p(t, T["@fill"] + 0.1 + k * 0.1, 0.5, ease.back);
+        const appear = p(t, T.newIn + k * 0.1, 0.5, ease.back);
         const s = T.scan[k];
         const toCam = p(t, s - 0.45, 0.45);
         const cell = cellOnStage(r.boxes[k], "G6", boxX, boxY[k]);
@@ -2633,7 +2677,7 @@
     [
       "aliquoter",
       [
-        "Check the ID on the tube",
+        "Check both IDs match",
         "Aliquot into three tubes",
         "Scan each; place where shown",
         "Hand the original back",
@@ -2660,7 +2704,7 @@
         const info = ROLES[role];
         return add(
           root,
-          `<div class="abs panel" style="width:520px;height:440px;padding:36px">
+          `<div class="abs panel" style="width:520px;height:470px;padding:36px">
             <div class="row" style="gap:20px"><div class="role-square" style="width:80px;height:80px">${icon(info.icon, 44)}</div><div style="font-size:46px;font-weight:800;letter-spacing:-0.03em">${info.name}</div></div>
             <ol style="list-style:none;padding:0;margin:34px 0 0;display:flex;flex-direction:column;gap:22px">${lines.map((l, i) => `<li class="row" style="gap:16px;font-size:27px;font-weight:600;line-height:1.25;align-items:flex-start"><span style="display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:#f1f5f9;font-size:22px;font-weight:800;flex:none">${i + 1}</span><span style="padding-top:5px">${l}</span></li>`).join("")}</ol>
           </div>`,
