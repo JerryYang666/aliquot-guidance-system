@@ -22,8 +22,8 @@ jobs:
     env:
       TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/ags_test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -40,8 +40,8 @@ jobs:
       run:
         working-directory: realtime
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version-file: realtime/go.mod
       - name: gofmt
@@ -62,7 +62,7 @@ jobs:
     env:
       PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Image name
         # Registry names must be lowercase; the owner's name is not.
         run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}/realtime" >> "$GITHUB_ENV"
