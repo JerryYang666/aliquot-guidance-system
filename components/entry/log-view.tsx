@@ -100,6 +100,12 @@ export function LogView({ code }: { code: string }) {
     <main className="mx-auto max-w-7xl p-4">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
+          <Link
+            href={`/j/${code}/station`}
+            className="text-sm text-slate-600 underline"
+          >
+            ← Back to the station
+          </Link>
           <div className="font-mono text-sm text-slate-500">
             {formatJobCode(code)}
           </div>

@@ -69,7 +69,8 @@ export function BoxGrid({
                     "cursor-pointer hover:ring-2 hover:ring-slate-400",
                 )}
               >
-                {renderCell?.(key) ?? (isHighlight ? key : null)}
+                {renderCell?.(key) ??
+                  (isHighlight && size !== "sm" ? key : null)}
               </Tag>
             );
           })}

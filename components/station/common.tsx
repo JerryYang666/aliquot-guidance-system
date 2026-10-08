@@ -181,7 +181,6 @@ export function StationHeader({
               <nav className="absolute right-0 mt-1 w-60 rounded-xl bg-white p-1 text-sm text-slate-900 shadow-xl ring-1 ring-slate-200">
                 <Link
                   href={`/j/${job.code}/log`}
-                  target="_blank"
                   className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-slate-100"
                 >
                   <FileText className="size-4" /> Activity log

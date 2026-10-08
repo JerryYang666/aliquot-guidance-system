@@ -20,7 +20,12 @@ import { randomId } from "@/lib/client/ids";
 import { decideScan } from "@/lib/pipeline/actions";
 import { destinationFor } from "@/lib/pipeline/destination";
 import { labelFor, normalizeLabel, parseLabel } from "@/lib/pipeline/labels";
-import { readyToAliquot, toLabel, toPull } from "@/lib/pipeline/queue";
+import {
+  isFinished,
+  isReady,
+  queueOrder,
+  readyToAliquot,
+} from "@/lib/pipeline/queue";
 import type { Sample } from "@/lib/pipeline/types";
 
 import { BoxGrid } from "../box-grid";
@@ -244,7 +249,10 @@ export function AliquoterView({
     setDialog(null);
   };
 
-  const waitingFor = toPull(samples)[0] ?? toLabel(samples)[0];
+  // The next sample coming this way: first in queue order not yet ready.
+  const waitingFor = queueOrder(samples).find(
+    (s) => !isFinished(s) && !isReady(s),
+  );
   const scanning = cameraState === "scanning";
 
   return (
