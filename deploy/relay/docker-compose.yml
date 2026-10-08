@@ -1,0 +1,30 @@
+# The realtime relay behind Caddy, which obtains and renews the TLS
+# certificate for RELAY_DOMAIN automatically. See docs/deploy.md.
+services:
+  relay:
+    build: ../../realtime
+    restart: unless-stopped
+    environment:
+      RELAY_SECRET: ${RELAY_SECRET:?set RELAY_SECRET in .env}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+    expose:
+      - "8081"
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on:
+      - relay
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      RELAY_DOMAIN: ${RELAY_DOMAIN:?set RELAY_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
