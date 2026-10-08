@@ -9,6 +9,7 @@ import {
   onlineParticipants,
   toJobInfo,
 } from "@/lib/server/jobs";
+import { jobLayouts } from "@/lib/server/layouts";
 import { heartbeat } from "@/lib/server/participants";
 import type { CodeContext } from "@/lib/server/route";
 import { requireParticipant } from "@/lib/server/tokens";
@@ -25,20 +26,22 @@ export const GET = handle(async (request: Request, context: CodeContext) => {
 
   await heartbeat(db, me);
   // One snapshot: the version and the rows it describes are read together.
-  const { job, batch, samples, batches, online } = await db.transaction(
-    async (tx) => {
-      const job = await getJobByCode(tx, code);
-      const batch = await getBatch(tx, job.id, batchNumber);
-      return {
-        job,
-        batch,
-        samples: await batchSamples(tx, batch.id),
-        batches: await listBatches(tx, job.id),
-        online: await onlineParticipants(tx, job.id),
-      };
-    },
-    { isolationLevel: "repeatable read", accessMode: "read only" },
-  );
+  const { job, batch, samples, batches, online, layouts } =
+    await db.transaction(
+      async (tx) => {
+        const job = await getJobByCode(tx, code);
+        const batch = await getBatch(tx, job.id, batchNumber);
+        return {
+          job,
+          batch,
+          samples: await batchSamples(tx, batch.id),
+          batches: await listBatches(tx, job.id),
+          online: await onlineParticipants(tx, job.id),
+          layouts: await jobLayouts(tx, job.id),
+        };
+      },
+      { isolationLevel: "repeatable read", accessMode: "read only" },
+    );
   const body: StateResponse = {
     version: job.version,
     job: toJobInfo(job),
@@ -56,6 +59,7 @@ export const GET = handle(async (request: Request, context: CodeContext) => {
       role: me.role,
       batchNumber: me.batchNumber,
     },
+    layouts,
   };
   return json(body);
 });

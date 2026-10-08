@@ -1,5 +1,6 @@
 /** Request and response shapes shared by the API routes and the browser. */
 import type { Destination } from "@/lib/pipeline/destination";
+import type { JobLayouts } from "@/lib/pipeline/layout";
 import type {
   Batch,
   JobInfo,
@@ -64,6 +65,7 @@ export interface StateResponse {
   samples: Sample[];
   online: OnlineParticipant[];
   me: Me;
+  layouts: JobLayouts;
 }
 
 export type ScanOutcome =
