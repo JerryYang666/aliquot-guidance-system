@@ -43,5 +43,9 @@ export function getDb(): Db {
   return globalForDb.agsDb;
 }
 
-export type { Db };
+/** A transaction handle; it can run every query a `Db` can. */
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+type DbOrTx = Db | Tx;
+
+export type { Db, DbOrTx, Tx };
 export { schema };

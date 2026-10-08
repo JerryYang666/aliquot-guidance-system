@@ -8,9 +8,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "."),
+      "@": path.resolve(import.meta.dirname, "."),
       "server-only": path.resolve(
-        __dirname,
+        import.meta.dirname,
         "node_modules/next/dist/compiled/server-only/empty.js",
       ),
     },
