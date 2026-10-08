@@ -45,6 +45,16 @@ export function pulledAwaitingLabels(samples: readonly Sample[]): Sample[] {
   );
 }
 
+/**
+ * Source tubes out of the freezer and not finished, as the Aliquoter's
+ * screen offers them: the ready ones, then those still waiting for their
+ * labels. The first is on the screen unless the Aliquoter taps another, and
+ * a scan must be of that sample's tubes. With none out, any tube goes.
+ */
+export function sourceTubesOut(samples: readonly Sample[]): Sample[] {
+  return [...readyToAliquot(samples), ...pulledAwaitingLabels(samples)];
+}
+
 /** Finished source tubes still out of the freezer, oldest first. */
 export function toReturn(samples: readonly Sample[]): Sample[] {
   return samples

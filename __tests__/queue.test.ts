@@ -6,6 +6,7 @@ import {
   pulledAwaitingLabels,
   queueOrder,
   readyToAliquot,
+  sourceTubesOut,
   toLabel,
   toPull,
   toReturn,
@@ -54,11 +55,23 @@ describe("queue order", () => {
     ).toEqual([3, 2]);
   });
 
+  it("offers the Aliquoter every source tube out, ready ones first", () => {
+    const pulled = makeSample({ pullOrder: 1, pulledAt: T0 });
+    const ready = makeSample({ pullOrder: 2, pulledAt: T0, labeledAt: T0 });
+    const labeled = makeSample({ pullOrder: 3, labeledAt: T0 });
+    const done = makeSample({ pullOrder: 4, pulledAt: T0, finishedAt: T1 });
+    expect(
+      sourceTubesOut([done, labeled, ready, pulled]).map((s) => s.pullOrder),
+    ).toEqual([2, 1]);
+    expect(sourceTubesOut([labeled, done])).toEqual([]);
+  });
+
   it("drops finished samples from every work list", () => {
     const done = makeSample({ finishedAt: T0 });
     expect(toPull([done])).toEqual([]);
     expect(toLabel([done])).toEqual([]);
     expect(readyToAliquot([done])).toEqual([]);
+    expect(sourceTubesOut([done])).toEqual([]);
   });
 
   it("lists finished, pulled, unreturned source tubes oldest first", () => {

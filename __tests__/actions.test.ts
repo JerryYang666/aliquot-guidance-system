@@ -6,6 +6,7 @@ import {
   applySampleAction,
   decideLabelScan,
   decideScan,
+  tubesPlacedBy,
   type ScanInput,
 } from "@/lib/pipeline/actions";
 import { parseLabel } from "@/lib/pipeline/labels";
@@ -31,6 +32,7 @@ function errorCode(result: ReturnType<typeof applySampleAction>) {
 }
 
 const placed = (by = "Bo") => ({ status: "placed" as const, at: T0, by });
+const notFilled = () => ({ status: "not_filled" as const, at: T0, by: "Bo" });
 
 describe("puller and labeler actions", () => {
   it("pulls once, and logs who", () => {
@@ -140,6 +142,54 @@ describe("aliquoter actions", () => {
     });
   });
 
+  it("sets a tube aside as not filled, so the scan places only the rest", () => {
+    const s = makeSample({ pulledAt: T0, labeledAt: T0 });
+    const r = ok(
+      applySampleAction(s, { type: "not_filled", sampleId: "x", tube: 3 }, ctx),
+    );
+    expect(r.sample.tubes[2]).toEqual({
+      status: "not_filled",
+      at: T1,
+      by: "Ana",
+    });
+    expect(r.sample.finishedAt).toBeNull();
+    expect(r.events).toMatchObject([{ type: "tube_not_filled", tube: 3 }]);
+
+    const scanned = applyPlacement(r.sample, 1, placeCtx);
+    expect(scanned.sample.tubes.map((t) => t.status)).toEqual([
+      "placed",
+      "placed",
+      "not_filled",
+    ]);
+    expect(scanned.events.map((e) => [e.type, e.tube])).toEqual([
+      ["tube_placed", 1],
+      ["tube_placed", 2],
+      ["sample_finished", null],
+    ]);
+  });
+
+  it("finishes a sample whose last pending tube is not filled", () => {
+    const s = makeSample({ pulledAt: T0, labeledAt: T0 });
+    s.tubes = [placed(), notFilled(), ...s.tubes.slice(2)];
+    const r = ok(
+      applySampleAction(s, { type: "not_filled", sampleId: "x", tube: 3 }, ctx),
+    );
+    expect(r.sample.finishedAt).toBe(T1);
+    expect(r.events.map((e) => [e.type, e.data])).toEqual([
+      ["tube_not_filled", {}],
+      ["sample_finished", { auto: true, notFilled: [2, 3] }],
+    ]);
+  });
+
+  it("only sets aside a tube that is still pending", () => {
+    const s = makeSample({ pulledAt: T0, labeledAt: T0 });
+    s.tubes[0] = placed();
+    const notFilledAction = (tube: number) =>
+      applySampleAction(s, { type: "not_filled", sampleId: "x", tube }, ctx);
+    expect(errorCode(notFilledAction(1))).toBe("tube_done");
+    expect(errorCode(notFilledAction(4))).toBe("bad_tube");
+  });
+
   it("refuses to change a returned sample until the return is undone", () => {
     const s = makeSample({
       pulledAt: T0,
@@ -240,6 +290,17 @@ describe("scan decisions", () => {
     expect(d.kind === "reject" && d.message).toContain("S0066 (41540)");
   });
 
+  it("checks against a source tube still waiting for its labels", () => {
+    const pulledOnly = { ...current, labeledAt: null };
+    expect(scan("S0067-1", { currentSample: pulledOnly })).toMatchObject({
+      kind: "reject",
+      reason: "wrong_sample",
+    });
+    expect(scan("S0066-1", { currentSample: pulledOnly })).toMatchObject({
+      kind: "place",
+    });
+  });
+
   it("accepts any unfinished sample's tube when the aliquoter is waiting", () => {
     expect(scan("S0067-1", { currentSample: null })).toMatchObject({
       kind: "place",
@@ -334,21 +395,73 @@ describe("scan decisions", () => {
 });
 
 describe("placing tubes", () => {
-  it("logs the destination and finishes the sample on its last tube", () => {
-    let s = makeSample({ slot: "G6", pulledAt: T0, labeledAt: T0 });
-    s = applyPlacement(s, 1, placeCtx).sample;
-    s = applyPlacement(s, 3, placeCtx).sample;
-    const last = applyPlacement(s, 2, placeCtx);
-    expect(last.sample.finishedAt).toBe(T1);
-    expect(last.events.map((e) => e.type)).toEqual([
-      "tube_placed",
-      "sample_finished",
-    ]);
-    expect(last.events[0]?.data).toMatchObject({
-      set: "Keep2",
-      box: 1,
+  it("places the sample's other tubes with the scanned one, and finishes it", () => {
+    const s = makeSample({
+      newId: "S0066",
       slot: "G6",
+      pulledAt: T0,
+      labeledAt: T0,
     });
+    const r = applyPlacement(s, 2, placeCtx);
+    expect(r.sample.tubes).toEqual(
+      [1, 2, 3].map(() => ({ status: "placed", at: T1, by: "Ana" })),
+    );
+    expect(r.sample.finishedAt).toBe(T1);
+    expect(r.events.map((e) => [e.type, e.tube, e.data])).toEqual([
+      [
+        "tube_placed",
+        2,
+        { label: "S0066-2", set: "Keep2", box: 1, slot: "G6" },
+      ],
+      [
+        "tube_placed",
+        1,
+        {
+          label: "S0066-1",
+          set: "Ship",
+          box: 1,
+          slot: "G6",
+          withLabel: "S0066-2",
+        },
+      ],
+      [
+        "tube_placed",
+        3,
+        {
+          label: "S0066-3",
+          set: "Keep3",
+          box: 1,
+          slot: "G6",
+          withLabel: "S0066-2",
+        },
+      ],
+      ["sample_finished", null, { auto: true, notFilled: [] }],
+    ]);
+  });
+
+  it("lists the scanned tube first, then the other pending ones", () => {
+    const s = makeSample();
+    expect(tubesPlacedBy(s, 3)).toEqual([3, 1, 2]);
+    s.tubes[0] = placed();
+    expect(tubesPlacedBy(s, 3)).toEqual([3, 2]);
+  });
+
+  it("leaves a tube recorded as not filled alone", () => {
+    // Finished with -3 not filled, then -2 undone: scanning -2 again
+    // places only it.
+    const s = makeSample({ pulledAt: T0, labeledAt: T0 });
+    s.tubes = [placed(), ...s.tubes.slice(1, 2), notFilled()];
+    const r = applyPlacement(s, 2, placeCtx);
+    expect(r.sample.tubes.map((t) => t.status)).toEqual([
+      "placed",
+      "placed",
+      "not_filled",
+    ]);
+    expect(r.sample.tubes[0]?.by).toBe("Bo");
+    expect(r.events.map((e) => [e.type, e.tube])).toEqual([
+      ["tube_placed", 2],
+      ["sample_finished", null],
+    ]);
   });
 
   it("records a missed pull or label as implied by the scan", () => {
@@ -358,6 +471,9 @@ describe("placing tubes", () => {
       "sample_pulled",
       "sample_labeled",
       "tube_placed",
+      "tube_placed",
+      "tube_placed",
+      "sample_finished",
     ]);
     expect(r.events[0]?.data).toEqual({ impliedByScan: true });
   });

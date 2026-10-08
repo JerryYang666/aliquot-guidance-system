@@ -7,9 +7,9 @@ with a team of three, each at their own screen:
   list, and puts it back afterwards.
 - **Labeler**: at the same time, finds the sample's three printed labels and
   sticks them on new tubes.
-- **Aliquoter**: checks the source tube, pipettes, and holds each new tube
-  to a phone camera. The Data Matrix scan confirms the tube and shows which
-  box and slot it goes in.
+- **Aliquoter**: checks the source tube, pipettes, and holds one of the new
+  tubes to a phone camera. The Data Matrix scan confirms the sample and
+  shows its slot: all three tubes go there, each in its own box.
 
 Screens stay in sync within a fraction of a second, work by keyboard and
 camera so gloved hands rarely touch them, and every action lands in an

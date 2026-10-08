@@ -4,6 +4,8 @@ out/
 coverage/
 *.tsbuildinfo
 next-env.d.ts
+# Written by `next dev`; CLAUDE.md already says what it says.
+/AGENTS.md
 .env
 .env.*
 !.env.example

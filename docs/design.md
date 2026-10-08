@@ -18,11 +18,11 @@ Destination boxes are 10×10, rows A–H, J, K (no I), columns 1–10.
 Work follows the **pull list** of each batch, which is sorted by where the
 source tubes are stored, to save freezer trips. The three roles:
 
-| Role                       | Does                                                                                                                                                                                                             | Confirms with                                     |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| **Puller** (operator 1)    | Finds the next source tube in the freezer, hands it to the aliquoter. Later returns aliquoted source tubes to their positions.                                                                                   | `Space` / `→` = pulled. `Enter` = returned.       |
-| **Labeler** (operator 3)   | At the same time, finds the three printed labels for that sample and sticks them on three empty tubes; hands them to the aliquoter.                                                                              | `Space` / `→` = labeled, or scan all three tubes. |
-| **Aliquoter** (operator 2) | Checks the source tube's original ID and the new tubes' labels against the screen, pipettes, then holds each new tube to the phone camera. Each scan confirms that tube and shows which box and slot it goes in. | Data Matrix scan (camera always on).              |
+| Role                       | Does                                                                                                                                                                                                                                              | Confirms with                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| **Puller** (operator 1)    | Finds the next source tube in the freezer, hands it to the aliquoter. Later returns aliquoted source tubes to their positions.                                                                                                                    | `Space` / `→` = pulled. `Enter` = returned.       |
+| **Labeler** (operator 3)   | At the same time, finds the three printed labels for that sample and sticks them on three empty tubes; hands them to the aliquoter.                                                                                                               | `Space` / `→` = labeled, or scan all three tubes. |
+| **Aliquoter** (operator 2) | Checks the source tube's original ID and the new tubes' labels against the screen, pipettes, then holds one of the new tubes to the phone camera. The scan confirms the sample and shows its slot, where all three tubes go, each in its own box. | Data Matrix scan (camera always on).              |
 
 The puller and labeler run one sample ahead of the aliquoter. Nobody needs to
 touch the screen during normal flow; buttons exist for exceptions.
@@ -32,13 +32,13 @@ One person can work several roles by opening one browser tab per role.
 **Working alone.** One person can also do a batch alone, as its Aliquoter
 and nothing else: they pull each source tube and stick on its labels
 themselves, then only scan. The Aliquoter is the last step, so a scan
-stands for the steps before it. With no sample under way, the first scan of
-any tube in the batch starts that sample and records it as pulled and
-labeled, logged as implied by the scan (see
-[What a scan does](#what-a-scan-does)). The screen shows the tube's box and
-slot, and the sample's other tubes finish it. Returning the source tube is
-still the Puller's to confirm, so working alone, finished samples stay on
-the return list.
+stands for the steps before it. With no sample under way, a scan of any
+tube in the batch records its sample as pulled and labeled, logged as
+implied by the scan, and places all of its tubes (see
+[What a scan does](#what-a-scan-does)). The screen shows the slot and the
+boxes, and the next scan can be of any other sample: samples go in any
+order. Returning the source tube is still the Puller's to confirm, so
+working alone, finished samples stay on the return list.
 
 ## Jobs, codes, and identity — no accounts
 
@@ -78,30 +78,43 @@ were skipped.
 - **Puller's next** = first sample in queue order not yet pulled.
 - **Labeler's next** = first sample in queue order not yet labeled.
 - **Aliquoter's ready list** = samples that are pulled **and** labeled but
-  not yet finished, in queue order. The aliquoter's current sample is the head
-  of that list unless they tap another one. A source tube can reach the
-  aliquoter before its labels are on, so the screen also lists the samples
-  that are pulled but not yet labeled, by original ID, and shows the first
-  of them large when nothing is ready.
+  not yet finished, in queue order. A source tube can reach the aliquoter
+  before its labels are on, so the screen also lists the samples that are
+  pulled but not yet labeled, by original ID. The aliquoter's current sample
+  is the head of the ready list, or with nothing ready the first pulled one,
+  unless they tap another one. It is the source tube on the screen, which
+  every scan is checked against; there is none only when no source tube of
+  the batch is out (pulled, not finished).
 - **Return list** (puller) = finished samples not yet returned, oldest first.
 
-Each sample has three tubes, each `pending`, `placed` (scanned), or
-`not_filled`. A sample is **finished** when no tube is pending: either all
-three were scanned, or the aliquoter pressed **Finish sample**, which marks
-the rest `not_filled` (used for low-volume tubes or spills; what to do is the
-operator's call, and they can add a note).
+Each sample has three tubes, each `pending`, `placed`, or `not_filled`. The
+three go in the same slot, each in its own set's box, so scanning one of
+them places them all. A sample is **finished** when no tube is pending:
+either one of its tubes was scanned, or the aliquoter pressed **Finish
+sample**, which marks the rest `not_filled` (used for low-volume tubes or
+spills; what to do is the operator's call, and they can add a note).
 
 ### What a scan does
 
 The scanned text must be `<new ID>-<1|2|3>` for a sample in this job.
 
-| Situation                                                                      | Result                                                                                                                                              |
-| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tube already placed                                                            | Shows its destination again (logged as a repeat).                                                                                                   |
-| Label belongs to the aliquoter's current sample                                | **Accepted**: tube placed; screen shows e.g. `KEEP2 · box 1 · G6`. Third tube finishes the sample and the screen advances to the next ready sample. |
-| Aliquoter has no current sample (waiting) and the label's sample is unfinished | **Accepted**, and the sample becomes current. If it was not marked pulled/labeled, that is recorded as implied by the scan.                         |
-| Label belongs to a different sample                                            | **Rejected** — red screen, error tone, message naming both samples. Logged.                                                                         |
-| Unknown label                                                                  | **Rejected** and logged.                                                                                                                            |
+| Situation                                                     | Result                                                                                                                                                                                                                          |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tube already placed                                           | Shows its destination again (logged as a repeat).                                                                                                                                                                               |
+| Label belongs to the aliquoter's current sample               | **Accepted**: the tube is placed, and the sample's other pending tubes with it, which finishes the sample. The screen shows the slot and the boxes, e.g. `SHIP KEEP2 KEEP3 · box 1 · G6`, and advances to the next source tube. |
+| No source tube is out, so the aliquoter has no current sample | **Accepted** the same way, for any sample of the batch, in any order. If it was not marked pulled/labeled, that is recorded as implied by the scan.                                                                             |
+| Label belongs to a different sample than the current one      | **Rejected** — red screen, error tone, message naming both samples. Logged.                                                                                                                                                     |
+| Unknown label                                                 | **Rejected** and logged.                                                                                                                                                                                                        |
+
+So within a batch, the one check is against the Puller's tube: the source
+tube they handed over is on the screen, labeled yet or not, and a scan must
+carry its new ID. With nobody pulling, no tube is out, and the Aliquoter
+scans in any order.
+
+Each tube placed is logged as `tube_placed`; one placed along with the
+scanned tube names that tube's label (`withLabel`), so the log keeps which
+one was scanned. Scanning the other tubes afterwards is not needed; it
+shows where they went, as a repeat.
 
 A tube of **another batch** depends on what the aliquoter's screen shows:
 
@@ -148,8 +161,12 @@ Letter shortcuts ignore Shift, so a scanner typing `S0066-1` does not trigger
 
 Volume notes from the workbook (`Low`, `Very low`, …) appear as a warning badge
 on all three roles' screens for that sample. The system does not enforce
-anything; the aliquoter scans whichever tubes they fill and finishes the
-sample, optionally with a note.
+anything. A scan places all of the sample's pending tubes, so a tube that
+could not be filled is set aside first: the aliquoter taps it on the screen
+(`tube_not_filled`), then scans one of the others, which places only those.
+Forgotten, it is put right afterwards on Overview: undo the tube, then
+finish the sample. With nothing filled, **Finish sample** records all three
+as not filled, optionally with a note.
 
 ### Corrections
 
@@ -159,7 +176,8 @@ edited or deleted.
 - Puller: undo last pull (`←`) while no tube of that sample is placed; undo
   a return; skip a sample (`S`).
 - Labeler: undo last label (`←`) while no tube is placed; skip a sample.
-- Aliquoter: undo a tube placement; reopen a finished sample.
+- Aliquoter: mark a tube not filled before the scan; undo a tube placement
+  or a tube marked not filled; reopen a finished sample.
 - Anyone: add a note to a sample.
 
 ## Data model (Postgres)
@@ -202,7 +220,7 @@ double-log.
 
 Logged event types: `job_created`, `participant_joined`, `participant_left`,
 `participant_moved`, `sample_pulled`, `sample_labeled`, `sample_skipped`, `label_scanned`,
-`label_scan_repeated`, `label_scan_rejected`, `tube_placed`,
+`label_scan_repeated`, `label_scan_rejected`, `tube_placed`, `tube_not_filled`,
 `scan_repeated`, `scan_rejected`, `sample_finished`, `sample_returned`,
 `note_added`, and an `*_undone` / `sample_reopened` entry for each reversal.
 

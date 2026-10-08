@@ -61,34 +61,30 @@ describe.skipIf(!url)("pipeline against Postgres", () => {
           {
             number: 2,
             boxNumber: 2,
-            samples: [
-              {
-                pullOrder: 1,
-                newId: "S0101",
-                originalId: "50000",
-                sourceBox: "AIP Box 4",
-                sourceLocation: "2nd shelf",
-                sourcePosition: "4-B-15",
-                slot: "A1",
-                volumeNote: null,
-              },
-            ],
+            samples: ["S0101", "S0102"].map((newId, i) => ({
+              pullOrder: i + 1,
+              newId,
+              originalId: String(50000 + i),
+              sourceBox: "AIP Box 4",
+              sourceLocation: "2nd shelf",
+              sourcePosition: `4-B-${15 + i}`,
+              slot: `A${i + 1}`,
+              volumeNote: null,
+            })),
           },
           {
             number: 3,
             boxNumber: 3,
-            samples: [
-              {
-                pullOrder: 1,
-                newId: "S0201",
-                originalId: "60000",
-                sourceBox: "AIP Box 5",
-                sourceLocation: "2nd shelf",
-                sourcePosition: "5-A-1",
-                slot: "A1",
-                volumeNote: null,
-              },
-            ],
+            samples: ["S0201", "S0202"].map((newId, i) => ({
+              pullOrder: i + 1,
+              newId,
+              originalId: String(60000 + i),
+              sourceBox: "AIP Box 5",
+              sourceLocation: "2nd shelf",
+              sourcePosition: `5-A-${i + 1}`,
+              slot: `A${i + 1}`,
+              volumeNote: null,
+            })),
           },
         ],
       },
@@ -149,32 +145,61 @@ describe.skipIf(!url)("pipeline against Postgres", () => {
       reason: "wrong_sample",
     });
 
-    for (const label of ["S0001-2", "S0001-1"]) {
-      const r = await act("aliquoter", {
-        type: "scan",
-        label,
-        currentSampleId: s1.id,
-      });
-      expect(r.scan).toMatchObject({ kind: "place", sampleFinished: false });
-    }
-    const last = await act("aliquoter", {
+    // The sample's three tubes share its slot, so one scan places them all.
+    const placed = await act("aliquoter", {
       type: "scan",
       label: "s0001-3",
       currentSampleId: s1.id,
     });
-    expect(last.scan).toMatchObject({
+    expect(placed.scan).toMatchObject({
       kind: "place",
       label: "S0001-3",
       destination: { set: "Keep3", box: 1, slot: "A1" },
+      tubes: [3, 1, 2],
       sampleFinished: true,
     });
+    expect(placed.events.map((e) => [e.type, e.tube, e.data])).toEqual([
+      [
+        "tube_placed",
+        3,
+        { label: "S0001-3", set: "Keep3", box: 1, slot: "A1" },
+      ],
+      [
+        "tube_placed",
+        1,
+        {
+          label: "S0001-1",
+          set: "Ship",
+          box: 1,
+          slot: "A1",
+          withLabel: "S0001-3",
+        },
+      ],
+      [
+        "tube_placed",
+        2,
+        {
+          label: "S0001-2",
+          set: "Keep2",
+          box: 1,
+          slot: "A1",
+          withLabel: "S0001-3",
+        },
+      ],
+      ["sample_finished", null, { auto: true, notFilled: [] }],
+    ]);
 
+    // Scanning another of its tubes shows where that one went.
     const again = await act("aliquoter", {
       type: "scan",
       label: "S0001-1",
       currentSampleId: null,
     });
-    expect(again.scan).toMatchObject({ kind: "repeat" });
+    expect(again.scan).toMatchObject({
+      kind: "repeat",
+      destination: { set: "Ship", box: 1, slot: "A1" },
+      tubes: [1],
+    });
 
     await act("puller", { type: "return", sampleId: s1.id });
     const done = await sample("S0001");
@@ -304,10 +329,10 @@ describe.skipIf(!url)("pipeline against Postgres", () => {
     ]);
   });
 
-  it("lets an Aliquoter work a batch alone, starting each sample with a scan", async () => {
+  it("lets an Aliquoter work a batch alone, one scan per sample, in any order", async () => {
     // Nobody pulls or labels batch 2: its Aliquoter does it all and only
-    // scans. With no sample under way, the first scan starts one and
-    // records it as pulled and labeled; its other tubes finish it.
+    // scans. With no source tube out, a scan of any tube in the batch does
+    // its whole sample: pulled and labeled as implied, all tubes placed.
     const db = mod.db.getDb();
     const job = await mod.jobs.getJobByCode(db, code);
     const sol = await mod.participants.joinJob(
@@ -316,52 +341,54 @@ describe.skipIf(!url)("pipeline against Postgres", () => {
       { name: "Sol", role: "aliquoter", batchNumber: 2 },
       "vitest",
     );
-    const scan = (label: string, currentSampleId: string | null) =>
+    const scan = (label: string) =>
       mod.actions.performAction(db, sol.participant, {
         clientActionId: actionId(),
         clientAt: new Date().toISOString(),
-        action: { type: "scan", label, currentSampleId },
+        action: { type: "scan", label, currentSampleId: null },
       });
     const s = await sample("S0101");
     expect(s.pulledAt).toBeNull();
     expect(s.labeledAt).toBeNull();
 
-    const first = await scan("S0101-2", null);
+    // The second sample in the pull list first.
+    const first = await scan("S0102-2");
     expect(first.scan).toMatchObject({
       kind: "place",
-      destination: { set: "Keep2", box: 2, slot: "A1" },
-      sampleFinished: false,
+      destination: { set: "Keep2", box: 2, slot: "A2" },
+      tubes: [2, 1, 3],
+      sampleFinished: true,
     });
-    expect(first.events.map((e) => [e.type, e.data])).toEqual([
-      ["sample_pulled", { impliedByScan: true }],
-      ["sample_labeled", { impliedByScan: true }],
-      ["tube_placed", expect.objectContaining({ label: "S0101-2" })],
+    expect(first.events.map((e) => [e.type, e.tube])).toEqual([
+      ["sample_pulled", null],
+      ["sample_labeled", null],
+      ["tube_placed", 2],
+      ["tube_placed", 1],
+      ["tube_placed", 3],
+      ["sample_finished", null],
     ]);
+    expect(first.events[0]?.data).toEqual({ impliedByScan: true });
 
-    // The sample is now the screen's current one, so its other tubes go
-    // in, and the last one finishes it.
-    expect((await scan("S0101-1", s.id)).scan).toMatchObject({
+    const second = await scan("S0101-1");
+    expect(second.scan).toMatchObject({
       kind: "place",
-      sampleFinished: false,
-    });
-    const last = await scan("S0101-3", s.id);
-    expect(last.scan).toMatchObject({
-      kind: "place",
-      destination: { set: "Keep3", box: 2, slot: "A1" },
+      destination: { set: "Ship", box: 2, slot: "A1" },
       sampleFinished: true,
     });
 
-    const done = await sample("S0101");
-    expect([done.pulledBy, done.labeledBy, done.finishedBy]).toEqual([
-      "Sol",
-      "Sol",
-      "Sol",
-    ]);
-    expect(done.tubes.map((t) => t.status)).toEqual([
-      "placed",
-      "placed",
-      "placed",
-    ]);
+    for (const newId of ["S0101", "S0102"]) {
+      const done = await sample(newId);
+      expect([done.pulledBy, done.labeledBy, done.finishedBy]).toEqual([
+        "Sol",
+        "Sol",
+        "Sol",
+      ]);
+      expect(done.tubes.map((t) => t.status)).toEqual([
+        "placed",
+        "placed",
+        "placed",
+      ]);
+    }
     await mod.participants.leaveJob(db, sol.participant);
   });
 
@@ -405,6 +432,9 @@ describe.skipIf(!url)("pipeline against Postgres", () => {
       ["sample_pulled", 3, { impliedByScan: true }],
       ["sample_labeled", 3, { impliedByScan: true }],
       ["tube_placed", 3, expect.objectContaining({ label: "S0201-1" })],
+      ["tube_placed", 3, expect.objectContaining({ label: "S0201-2" })],
+      ["tube_placed", 3, expect.objectContaining({ label: "S0201-3" })],
+      ["sample_finished", 3, { auto: true, notFilled: [] }],
     ]);
     expect(first.moved?.me).toEqual({
       participantId: mo.participant.participantId,
@@ -430,15 +460,51 @@ describe.skipIf(!url)("pipeline against Postgres", () => {
       there,
     );
 
-    // On batch 3, S0201 is out: a tube of another batch is wrong again.
-    const s = await sample("S0201");
+    // Once a Puller hands over a source tube of batch 3, a tube of
+    // another batch is wrong again.
+    const s = await sample("S0202");
+    await act("puller", { type: "pull", sampleId: s.id });
     const wrong = await scan(there, "S0002-1", s.id);
     expect(wrong.scan).toMatchObject({ kind: "reject", reason: "other_batch" });
     expect(wrong.moved).toBeUndefined();
-    expect((await scan(there, "S0201-2", s.id)).scan).toMatchObject({
+    expect((await scan(there, "S0202-2", s.id)).scan).toMatchObject({
       kind: "place",
     });
     await mod.participants.leaveJob(db, there);
+  });
+
+  it("sets a low-volume tube aside before the scan places the rest", async () => {
+    // S0003 ("Very low") is pulled and labeled by now. Its -3 cannot be
+    // filled: the Aliquoter says so first, then one scan does the rest.
+    const s3 = await sample("S0003");
+    const set = await act("aliquoter", {
+      type: "not_filled",
+      sampleId: s3.id,
+      tube: 3,
+    });
+    expect(set.events.map((e) => [e.type, e.tube, e.actorName])).toEqual([
+      ["tube_not_filled", 3, "Ali"],
+    ]);
+    await expect(
+      act("aliquoter", { type: "not_filled", sampleId: s3.id, tube: 3 }),
+    ).rejects.toMatchObject({ status: 409, code: "tube_done" });
+
+    const r = await act("aliquoter", {
+      type: "scan",
+      label: "S0003-2",
+      currentSampleId: s3.id,
+    });
+    expect(r.scan).toMatchObject({
+      kind: "place",
+      tubes: [2, 1],
+      sampleFinished: true,
+    });
+    const done = await sample("S0003");
+    expect(done.tubes.map((t) => t.status)).toEqual([
+      "placed",
+      "placed",
+      "not_filled",
+    ]);
   });
 
   it("lets one person hold each working role on a batch while others wait", async () => {
