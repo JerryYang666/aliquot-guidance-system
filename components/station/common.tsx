@@ -8,6 +8,7 @@ import {
   Menu,
   MessageSquare,
   Moon,
+  QrCode,
   RefreshCw,
   Sun,
   Users,
@@ -32,6 +33,7 @@ import {
 } from "@/lib/pipeline/queue";
 import { ROLE_LABELS, type LogEvent, type Sample } from "@/lib/pipeline/types";
 
+import { JoinQrDialog } from "../join-qr";
 import { ROLE_ICONS } from "../role-icons";
 import { Badge, cx } from "../ui";
 
@@ -84,6 +86,27 @@ function WakePill({ state }: { state: WakeLockState }) {
   );
 }
 
+function JoinQrButton({
+  onClick,
+  className,
+}: {
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cx(
+        "shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium whitespace-nowrap ring-1 ring-white/40 hover:bg-white/10",
+        className,
+      )}
+    >
+      <QrCode className="size-4" /> QR code to join
+    </button>
+  );
+}
+
 export function StationHeader({
   snapshot,
   online,
@@ -91,6 +114,7 @@ export function StationHeader({
   wake,
   onLeave,
   onRefresh,
+  onDialogChange,
   token,
 }: {
   snapshot: StateResponse;
@@ -99,8 +123,11 @@ export function StationHeader({
   wake: WakeLockState;
   onLeave: () => void;
   onRefresh: () => void;
+  /** Told while the QR dialog is open, so the station's shortcuts pause. */
+  onDialogChange: (open: boolean) => void;
   token: string;
 }) {
+  const [qrOpen, setQrOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const { job, batch, me } = snapshot;
@@ -109,128 +136,144 @@ export function StationHeader({
 
   const RoleIcon = ROLE_ICONS[me.role];
   const station = `Batch ${batch.number} · Box ${batch.boxNumber}`;
+  const showQr = (open: boolean) => {
+    setQrOpen(open);
+    onDialogChange(open);
+  };
 
   // What tells one station's screen from another's is largest: the role,
-  // then the batch and its box. On a wide screen they share the first line;
-  // on a narrow one the batch and box drop to the second.
+  // then the batch and its box. A wide screen has it all on one line, with
+  // the name and job beneath. A narrower one puts the batch and box on the
+  // second line, with the QR button at its end.
   return (
-    <header className="sticky top-0 z-30 bg-slate-900 text-white">
-      <div className="mx-auto grid max-w-7xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-2">
-        <span className="flex size-9 items-center justify-center rounded-lg bg-white text-slate-900 md:row-span-2 md:size-12 md:rounded-xl">
-          <RoleIcon className="size-5 md:size-7" />
-        </span>
-        <div className="flex min-w-0 items-baseline gap-x-4 leading-tight font-bold tracking-tight">
-          <span className="truncate text-2xl md:text-3xl">
-            {ROLE_LABELS[me.role]}
+    <>
+      <header className="sticky top-0 z-30 bg-slate-900 text-white">
+        <div className="mx-auto grid max-w-7xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-2">
+          <span className="flex size-9 items-center justify-center rounded-lg bg-white text-slate-900 lg:row-span-2 lg:size-12 lg:rounded-xl">
+            <RoleIcon className="size-5 lg:size-7" />
           </span>
-          <span className="hidden shrink-0 text-2xl text-slate-200 md:inline">
-            {station}
-          </span>
-        </div>
-        <div className="col-span-3 row-start-2 mt-1 flex min-w-0 items-baseline gap-x-2 md:col-span-1 md:col-start-2 md:mt-0">
-          <span className="shrink-0 text-xl leading-tight font-bold tracking-tight md:hidden">
-            {station}
-          </span>
-          <span className="truncate text-sm text-slate-300">
-            {me.name}
-            {" · "}
-            {job.name}
-            <span className="ml-2 hidden font-mono text-xs text-slate-400 md:inline">
-              {formatJobCode(job.code)}
+          <div className="flex min-w-0 items-baseline gap-x-4 leading-tight font-bold tracking-tight">
+            <span className="truncate text-2xl lg:text-3xl">
+              {ROLE_LABELS[me.role]}
             </span>
-          </span>
-        </div>
-        <div className="col-start-3 row-start-1 flex items-center gap-3 md:row-span-2">
-          <ConnectionPill connection={connection} />
-          <WakePill state={wake} />
-          <div className="relative">
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm hover:bg-white/10"
-              onClick={() => setPeopleOpen((o) => !o)}
-              aria-expanded={peopleOpen}
-            >
-              <Users className="size-4" />
-              {online.length}
-            </button>
-            {peopleOpen && (
-              <div className="absolute right-0 mt-1 w-64 rounded-xl bg-white p-2 text-slate-900 shadow-xl ring-1 ring-slate-200">
-                <div className="px-2 py-1 text-xs font-semibold text-slate-500 uppercase">
-                  Online now
+            <span className="hidden shrink-0 text-2xl text-slate-200 lg:inline">
+              {station}
+            </span>
+          </div>
+          <div className="col-span-3 row-start-2 mt-1 flex min-w-0 items-center gap-x-2 lg:col-span-1 lg:col-start-2 lg:mt-0">
+            <span className="shrink-0 text-xl leading-tight font-bold tracking-tight sm:text-2xl lg:hidden">
+              {station}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-sm text-slate-300">
+              {me.name}
+              {" · "}
+              {job.name}
+              <span className="ml-2 hidden font-mono text-xs text-slate-400 sm:inline">
+                {formatJobCode(job.code)}
+              </span>
+            </span>
+            <JoinQrButton
+              className="inline-flex lg:hidden"
+              onClick={() => showQr(true)}
+            />
+          </div>
+          <div className="col-start-3 row-start-1 flex items-center gap-3 lg:row-span-2">
+            <ConnectionPill connection={connection} />
+            <WakePill state={wake} />
+            <div className="relative">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm hover:bg-white/10"
+                onClick={() => setPeopleOpen((o) => !o)}
+                aria-expanded={peopleOpen}
+              >
+                <Users className="size-4" />
+                {online.length}
+              </button>
+              {peopleOpen && (
+                <div className="absolute right-0 mt-1 w-64 rounded-xl bg-white p-2 text-slate-900 shadow-xl ring-1 ring-slate-200">
+                  <div className="px-2 py-1 text-xs font-semibold text-slate-500 uppercase">
+                    Online now
+                  </div>
+                  {online.length === 0 && (
+                    <div className="px-2 py-1 text-sm text-slate-500">
+                      Nobody else yet.
+                    </div>
+                  )}
+                  {online.map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex justify-between gap-2 px-2 py-1 text-sm"
+                    >
+                      <span className="truncate">{p.name}</span>
+                      <span className="shrink-0 text-slate-500">
+                        {ROLE_LABELS[p.role]}
+                        {p.batchNumber ? ` · B${p.batchNumber}` : ""}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-                {online.length === 0 && (
-                  <div className="px-2 py-1 text-sm text-slate-500">
-                    Nobody else yet.
-                  </div>
-                )}
-                {online.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex justify-between gap-2 px-2 py-1 text-sm"
+              )}
+            </div>
+            <JoinQrButton
+              className="hidden lg:inline-flex"
+              onClick={() => showQr(true)}
+            />
+            <div className="relative">
+              <button
+                type="button"
+                aria-label="Menu"
+                aria-expanded={menuOpen}
+                className="rounded-md p-1.5 hover:bg-white/10"
+                onClick={() => setMenuOpen((o) => !o)}
+              >
+                <Menu className="size-5" />
+              </button>
+              {menuOpen && (
+                <nav className="absolute right-0 mt-1 w-60 rounded-xl bg-white p-1 text-sm text-slate-900 shadow-xl ring-1 ring-slate-200">
+                  <Link
+                    href={`/j/${job.code}/log`}
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-slate-100"
                   >
-                    <span className="truncate">{p.name}</span>
-                    <span className="shrink-0 text-slate-500">
-                      {ROLE_LABELS[p.role]}
-                      {p.batchNumber ? ` · B${p.batchNumber}` : ""}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="relative">
-            <button
-              type="button"
-              aria-label="Menu"
-              aria-expanded={menuOpen}
-              className="rounded-md p-1.5 hover:bg-white/10"
-              onClick={() => setMenuOpen((o) => !o)}
-            >
-              <Menu className="size-5" />
-            </button>
-            {menuOpen && (
-              <nav className="absolute right-0 mt-1 w-60 rounded-xl bg-white p-1 text-sm text-slate-900 shadow-xl ring-1 ring-slate-200">
-                <Link
-                  href={`/j/${job.code}/log`}
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-slate-100"
-                >
-                  <FileText className="size-4" /> Activity log
-                </Link>
-                <a
-                  href={exportUrl("xlsx")}
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-slate-100"
-                >
-                  <Download className="size-4" /> Download Excel
-                </a>
-                <a
-                  href={exportUrl("csv")}
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-slate-100"
-                >
-                  <Download className="size-4" /> Download log (CSV)
-                </a>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onRefresh();
-                  }}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 hover:bg-slate-100"
-                >
-                  <RefreshCw className="size-4" /> Reload data
-                </button>
-                <button
-                  type="button"
-                  onClick={onLeave}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-red-700 hover:bg-red-50"
-                >
-                  <LogOut className="size-4" /> Switch role or batch
-                </button>
-              </nav>
-            )}
+                    <FileText className="size-4" /> Activity log
+                  </Link>
+                  <a
+                    href={exportUrl("xlsx")}
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-slate-100"
+                  >
+                    <Download className="size-4" /> Download Excel
+                  </a>
+                  <a
+                    href={exportUrl("csv")}
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-slate-100"
+                  >
+                    <Download className="size-4" /> Download log (CSV)
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onRefresh();
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 hover:bg-slate-100"
+                  >
+                    <RefreshCw className="size-4" /> Reload data
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onLeave}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-red-700 hover:bg-red-50"
+                  >
+                    <LogOut className="size-4" /> Switch role or batch
+                  </button>
+                </nav>
+              )}
+            </div>
           </div>
         </div>
-      </div>
-    </header>
+      </header>
+      {qrOpen && <JoinQrDialog code={job.code} onClose={() => showQr(false)} />}
+    </>
   );
 }
 

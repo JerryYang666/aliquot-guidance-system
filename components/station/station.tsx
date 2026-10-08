@@ -135,6 +135,7 @@ export function Station({ code }: { code: string }) {
         token={session.token}
         onLeave={() => void leave()}
         onRefresh={() => void sync.refresh()}
+        onDialogChange={setDialogOpen}
       />
       <PipelineStrip samples={sync.samples} />
       {session.me.role === "puller" && <PullerView {...props} />}

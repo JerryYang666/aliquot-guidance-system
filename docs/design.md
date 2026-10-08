@@ -39,8 +39,10 @@ accounts; only admins sign in (see [Admins](#admins)).
   names, and get a **job code**: 8 letters from an alphabet without `I`, `L`,
   `O` (shown as `ABCD-EFGH`; typing ignores case, spaces and dashes). The
   create screen also shows a QR code and link (`/j/ABCDEFGH`) so phones join
-  by pointing the camera at it. 23⁸ ≈ 7.8·10¹⁰ codes make guessing
-  impractical; the code is the only gate, by design.
+  by pointing the camera at it. The same QR code is one tap away later:
+  **QR code to join** on the join screen and in every station's header.
+  23⁸ ≈ 7.8·10¹⁰ codes make guessing impractical; the code is the only
+  gate, by design.
 - **Join**: enter the code, your **name**, the **batch**, and a **role**
   (Puller, Labeler, Aliquoter, or Overview). A batch has one Puller, one
   Labeler and one Aliquoter at a time: a role that someone online already

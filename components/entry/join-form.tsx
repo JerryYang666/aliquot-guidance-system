@@ -1,5 +1,6 @@
 "use client";
 
+import { QrCode } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -16,6 +17,7 @@ import {
 import { formatJobCode } from "@/lib/job-code";
 import { ROLE_LABELS, type Role } from "@/lib/pipeline/types";
 
+import { JoinQrDialog } from "../join-qr";
 import { ROLE_ICONS } from "../role-icons";
 import { Button, Card, cx, Label } from "../ui";
 
@@ -44,6 +46,7 @@ export function JoinForm({ code }: { code: string }) {
   const [role, setRole] = useState<Role | null>(null);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [qrOpen, setQrOpen] = useState(false);
 
   // The job, and again every few seconds: which roles are free changes as
   // people come and go.
@@ -150,12 +153,18 @@ export function JoinForm({ code }: { code: string }) {
 
   return (
     <form onSubmit={join} className="flex flex-col gap-5">
-      <div>
-        <div className="font-mono text-sm text-slate-500">
-          {formatJobCode(summary.job.code)}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-mono text-sm text-slate-500">
+            {formatJobCode(summary.job.code)}
+          </div>
+          <h1 className="text-2xl font-bold">{summary.job.name}</h1>
         </div>
-        <h1 className="text-2xl font-bold">{summary.job.name}</h1>
+        <Button className="shrink-0" onClick={() => setQrOpen(true)}>
+          <QrCode className="size-4" /> QR code to join
+        </Button>
       </div>
+      {qrOpen && <JoinQrDialog code={code} onClose={() => setQrOpen(false)} />}
 
       {existing && (
         <Card className="flex items-center justify-between gap-3 bg-emerald-50 ring-emerald-200">

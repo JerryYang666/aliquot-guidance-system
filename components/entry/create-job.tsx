@@ -7,27 +7,15 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import Link from "next/link";
-import QRCode from "qrcode";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 
 import type { CreateJobResponse, ParseResponse } from "@/lib/api-types";
 import { api, ApiFailure } from "@/lib/client/api";
 import { rememberedName } from "@/lib/client/session";
 import { formatJobCode } from "@/lib/job-code";
 
+import { JoinQr } from "../join-qr";
 import { Button, Card, cx, Label, setColor } from "../ui";
-
-function JoinQr({ url }: { url: string }) {
-  const [svg, setSvg] = useState<string | null>(null);
-  useEffect(() => {
-    QRCode.toString(url, { type: "svg", margin: 1, errorCorrectionLevel: "M" })
-      .then(setSvg)
-      .catch(() => setSvg(null));
-  }, [url]);
-  if (!svg) return null;
-  // The SVG is generated locally from our own URL.
-  return <div className="size-48" dangerouslySetInnerHTML={{ __html: svg }} />;
-}
 
 function Created({ code }: { code: string }) {
   const url = `${window.location.origin}/j/${code}`;
