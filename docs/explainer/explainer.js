@@ -223,14 +223,25 @@
   const TUBE_BODY =
     "M18 56 H82 V226 Q82 240 74 250 L57 270 Q50 278 43 270 L26 250 Q18 240 18 226 Z";
 
-  /** A screw-cap tube seen from the side, 100 × 280, with a fill level. */
-  function tube(parent, { label = "", cap = "#334155", level = 0 } = {}) {
+  /**
+   * A screw-cap tube seen from the side, 100 × 280, with a fill level. New
+   * tubes' labels carry a Data Matrix to scan; an original tube's label has
+   * only its number (`code: false`).
+   */
+  function tube(
+    parent,
+    { label = "", cap = "#334155", level = 0, code = true } = {},
+  ) {
     const id = `tube${uid++}`;
     let ridges = "";
     for (let x = 26; x <= 74; x += 8)
       ridges += `<line x1="${x}" y1="6" x2="${x}" y2="38" stroke="rgba(255,255,255,0.14)" stroke-width="2"/>`;
+    const mono = `font-family="JetBrains Mono, ui-monospace, monospace" font-weight="800" fill="#0f172a" text-anchor="middle"`;
+    const text = code
+      ? `<text x="50" y="83" ${mono} font-size="12">${label}</text>${matrix(label, 33, 94, 34)}`
+      : `<text x="50" y="115" ${mono} font-size="17">${label}</text>`;
     const labelSvg = label
-      ? `<g class="lbl-g"><rect x="20" y="66" width="60" height="86" rx="4" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/><text x="50" y="${label.length > 5 ? 83 : 86}" font-family="JetBrains Mono, ui-monospace, monospace" font-weight="800" font-size="${label.length > 5 ? 12 : 15}" fill="#0f172a" text-anchor="middle">${label}</text>${matrix(label, 33, 94, 34)}</g>`
+      ? `<g class="lbl-g"><rect x="20" y="66" width="60" height="86" rx="4" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>${text}</g>`
       : "";
     const el = add(
       parent,
@@ -668,7 +679,7 @@
           `<div class="abs" style="width:250px;display:flex;justify-content:space-between;font-size:26px;font-weight:800;color:${SET_COLORS[k]}"><span>${SETS[k]} 1</span><span class="mono slot" style="font-size:22px">G6</span></div>`,
         ),
       );
-      r.src = tube(root, { label: S66.originalId, level: 0.82 });
+      r.src = tube(root, { label: S66.originalId, level: 0.82, code: false });
       r.news = [1, 2, 3].map((k) =>
         tube(root, { label: S66.label(k), cap: "#475569" }),
       );
@@ -1526,7 +1537,7 @@
         root,
         `<div class="abs row" style="gap:10px;font-size:26px;font-weight:700;color:var(--ink-2)">${icon("snowflake", 28)} case_box 1</div>`,
       );
-      r.tube = tube(root, { label: S66.originalId, level: 0.82 });
+      r.tube = tube(root, { label: S66.originalId, level: 0.82, code: false });
       r.aliq = roleChip(root, "aliquoter");
       r.space = keycap(root, "Space");
       r.space.style.width = "420px";
@@ -2100,7 +2111,7 @@
         (l) => labelSVG(l, 180),
       );
 
-      r.src = tube(root, { label: S66.originalId, level: 0.82 });
+      r.src = tube(root, { label: S66.originalId, level: 0.82, code: false });
       r.news = [1, 2, 3].map((k) =>
         tube(root, { label: S66.label(k), cap: "#475569" }),
       );
