@@ -5,6 +5,8 @@ export default defineConfig({
   test: {
     include: ["__tests__/**/*.test.ts"],
     environment: "node",
+    // The integration files share one database, which each of them resets.
+    fileParallelism: false,
   },
   resolve: {
     alias: {

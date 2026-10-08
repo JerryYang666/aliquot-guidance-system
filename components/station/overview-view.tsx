@@ -12,7 +12,7 @@ import { BoxGrid } from "../box-grid";
 import { Modal } from "../modal";
 import { Button, Card, cx, Label, setColor } from "../ui";
 
-import { Feed, SampleFlags } from "./common";
+import { Feed, ProgressBar, SampleFlags } from "./common";
 import type { ViewProps } from "./types";
 
 type Stage =
@@ -50,34 +50,6 @@ const TUBE_DOT: Record<string, string> = {
   placed: "bg-slate-900",
   not_filled: "bg-red-500",
 };
-
-function Bar({
-  label,
-  value,
-  total,
-}: {
-  label: string;
-  value: number;
-  total: number;
-}) {
-  const pct = total ? Math.round((value / total) * 100) : 0;
-  return (
-    <div>
-      <div className="flex justify-between text-sm">
-        <span className="text-slate-600">{label}</span>
-        <span className="font-mono font-semibold">
-          {value}/{total}
-        </span>
-      </div>
-      <div className="mt-1 h-2 rounded-full bg-slate-200">
-        <div
-          className="h-2 rounded-full bg-slate-900"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-    </div>
-  );
-}
 
 export function OverviewView({
   snapshot,
@@ -171,18 +143,22 @@ export function OverviewView({
       <div className="flex flex-col gap-4">
         <Card className="flex flex-col gap-3">
           <Label>Progress</Label>
-          <Bar label="Pulled" value={progress.pulled} total={progress.total} />
-          <Bar
+          <ProgressBar
+            label="Pulled"
+            value={progress.pulled}
+            total={progress.total}
+          />
+          <ProgressBar
             label="Labeled"
             value={progress.labeled}
             total={progress.total}
           />
-          <Bar
+          <ProgressBar
             label="Aliquoted"
             value={progress.finished}
             total={progress.total}
           />
-          <Bar
+          <ProgressBar
             label="Returned"
             value={progress.returned}
             total={progress.total}

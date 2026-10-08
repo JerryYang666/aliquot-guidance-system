@@ -249,6 +249,35 @@ export function PipelineStrip({ samples }: { samples: Sample[] }) {
   );
 }
 
+/** A count out of a total, drawn as a bar. */
+export function ProgressBar({
+  label,
+  value,
+  total,
+}: {
+  label: string;
+  value: number;
+  total: number;
+}) {
+  const pct = total ? Math.round((value / total) * 100) : 0;
+  return (
+    <div>
+      <div className="flex justify-between text-sm">
+        <span className="text-slate-600">{label}</span>
+        <span className="font-mono font-semibold">
+          {value}/{total}
+        </span>
+      </div>
+      <div className="mt-1 h-2 rounded-full bg-slate-200">
+        <div
+          className="h-2 rounded-full bg-slate-900"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function SampleFlags({
   sample,
   large,

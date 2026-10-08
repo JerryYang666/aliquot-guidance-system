@@ -4,6 +4,7 @@
  */
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigint,
   integer,
   jsonb,
@@ -132,9 +133,37 @@ export const events = pgTable(
   (t) => [unique().on(t.jobId, t.version, t.ord)],
 );
 
+export const adminPasskeys = pgTable("admin_passkeys", {
+  id: uuid("id").primaryKey(),
+  name: text("name").notNull(),
+  credentialId: text("credential_id").notNull().unique(),
+  publicKey: text("public_key").notNull(),
+  counter: bigint("counter", { mode: "number" }).notNull().default(0),
+  transports: jsonb("transports").$type<string[]>().notNull().default([]),
+  createdAt: ts("created_at")
+    .notNull()
+    .default(sql`clock_timestamp()`),
+  lastUsedAt: ts("last_used_at"),
+  revokedAt: ts("revoked_at"),
+  revokedBy: uuid("revoked_by").references((): AnyPgColumn => adminPasskeys.id),
+});
+
+export const adminInvites = pgTable("admin_invites", {
+  id: uuid("id").primaryKey(),
+  tokenHash: text("token_hash").notNull().unique(),
+  createdBy: uuid("created_by").references(() => adminPasskeys.id),
+  createdAt: ts("created_at")
+    .notNull()
+    .default(sql`clock_timestamp()`),
+  expiresAt: ts("expires_at").notNull(),
+  usedAt: ts("used_at"),
+  usedBy: uuid("used_by").references(() => adminPasskeys.id),
+});
+
 export type Role = "puller" | "labeler" | "aliquoter" | "overview";
 export type JobRow = typeof jobs.$inferSelect;
 export type BatchRow = typeof batches.$inferSelect;
 export type SampleRow = typeof samples.$inferSelect;
 export type ParticipantRow = typeof participants.$inferSelect;
 export type EventRow = typeof events.$inferSelect;
+export type AdminPasskeyRow = typeof adminPasskeys.$inferSelect;

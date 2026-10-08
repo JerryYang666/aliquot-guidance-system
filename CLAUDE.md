@@ -31,6 +31,14 @@ Keep it that way:
 - Screens apply changes in job-version order (`lib/client/sync-state.ts`);
   anything that changes state must bump the version through `commitChange`.
 
+## Admins
+
+- Every route under `app/api/admin/` starts with `requireAdmin`, except
+  those that sign in, sign out or add a passkey, which start with
+  `relyingParty`.
+- A passkey is only ever added by spending an invite (`addPasskey` in
+  `lib/server/admin/passkeys.ts`). There is no other way in; do not add one.
+
 ## Database
 
 - Migrations are hand-written `migrations/NNNN_name.sql`, applied by hand

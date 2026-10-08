@@ -12,14 +12,15 @@ phones / laptops ──HTTPS──▶ Vercel (Next.js) ──▶ Postgres
 
 ## 1. Postgres
 
-Any Postgres 14 or newer. Apply the schema once:
+Any Postgres 14 or newer. Apply the migrations once each, in order:
 
 ```sh
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/0001_init.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/0002_admin_passkeys.sql
 ```
 
-Later migrations are numbered files in `migrations/`, applied the same way
-and in order. There is no migration runner.
+Later migrations are numbered files in `migrations/`, applied the same way.
+There is no migration runner.
 
 Each Vercel function instance holds up to 5 connections. If the database
 limits connections tightly, give Vercel a pooled connection string (RDS
@@ -33,12 +34,12 @@ directly in the database instead:
 
 ```sh
 npm ci
-npm run seed-sql -- Aliquot_batch_sheets.xlsx --name "Aliquot batches" --by "Your name" > job.seed.sql
+npm run --silent seed-sql -- Aliquot_batch_sheets.xlsx --name "Aliquot batches" --by "Your name" > job.seed.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f job.seed.sql
 ```
 
-The script prints the job code. `--code ABCDEFGH` chooses one (8 letters,
-no I, L or O). The SQL contains the lab's sample data: keep it out of the
+The script prints the job code. `--silent` keeps npm's own banner out of
+the SQL. `--code ABCDEFGH` chooses a code (8 letters, no I, L or O). The SQL contains the lab's sample data: keep it out of the
 repository (`*.seed.sql` is gitignored).
 
 ## 2. Secrets
@@ -50,8 +51,8 @@ openssl rand -base64 48   # APP_SECRET: signs operators' session tokens
 openssl rand -base64 48   # RELAY_SECRET: shared by the app and the relay
 ```
 
-Changing `APP_SECRET` signs everyone out; they join again with the job
-code. Nothing is lost.
+Changing `APP_SECRET` signs everyone out: operators join again with the job
+code, admins sign in again with their passkey. Nothing is lost.
 
 ## 3. Relay on AWS (EC2)
 
@@ -101,16 +102,37 @@ refetch.
    | -------------------- | -------------------------------- |
    | `DATABASE_URL`       | The Postgres connection string   |
    | `APP_SECRET`         | From step 2                      |
+   | `APP_ORIGIN`         | `https://aliquot.example.org`    |
    | `RELAY_SECRET`       | From step 2, same as the relay's |
    | `RELAY_PUBLIC_URL`   | `wss://relay.example.org`        |
    | `RELAY_INTERNAL_URL` | `https://relay.example.org`      |
+
+   `APP_ORIGIN` is the address people open the app at. Admin passkeys are
+   bound to its hostname: admins sign in at this address only, and if the
+   hostname changes, every passkey has to be added again.
 
 3. Put the function region near the database (Project → Settings →
    Functions → Region); every action is a short transaction there.
 4. Deploy. Set the relay's `ALLOWED_ORIGINS` to the app's URL and run
    `docker compose up -d` on the relay again.
 
-## 5. Check it end to end
+## 5. The first admin
+
+Admins sign in with a passkey at `/admin` and see every job. A passkey is
+added through an invite link, and the first link is made here:
+
+```sh
+npm run --silent admin-invite-sql -- --origin https://aliquot.example.org > invite.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f invite.sql
+```
+
+The script prints the link on the terminal; the SQL holds only its hash.
+Open the link within 10 minutes of applying the SQL (`--minutes 30` allows
+longer), enter your name and add a passkey. The link works once. After
+that, make invite links for other admins, or for your other devices, on
+the admin page. If every passkey is ever lost, run this again.
+
+## 6. Check it end to end
 
 1. Open the app, create a job from the workbook, and join it from two
    devices: a laptop as Puller and a phone as Aliquoter.

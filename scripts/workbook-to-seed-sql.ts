@@ -2,7 +2,7 @@
  * Turns an aliquot workbook into a standalone SQL file that creates one job,
  * for seeding a database without going through the web UI.
  *
- *   npm run seed-sql -- <workbook.xlsx> --name "Aliquot 2026" --by "Jerry" > job.seed.sql
+ *   npm run --silent seed-sql -- <workbook.xlsx> --name "Aliquot 2026" --by "Jerry" > job.seed.sql
  *   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f job.seed.sql
  *
  * The output contains the samples' IDs and storage positions. Keep it out of
@@ -38,7 +38,7 @@ async function main() {
   const file = positionals[0];
   if (!file || !values.name || !values.by) {
     console.error(
-      'Usage: npm run seed-sql -- <workbook.xlsx> --name "<job name>" --by "<your name>" [--code ABCDEFGH]',
+      'Usage: npm run --silent seed-sql -- <workbook.xlsx> --name "<job name>" --by "<your name>" [--code ABCDEFGH]',
     );
     process.exit(2);
   }

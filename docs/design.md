@@ -31,7 +31,8 @@ One person can work several roles by opening one browser tab per role.
 
 ## Jobs, codes, and identity — no accounts
 
-The home page offers **Create a job** or **Join a job**.
+The home page offers **Create a job** or **Join a job**. Operators have no
+accounts; only admins sign in (see [Admins](#admins)).
 
 - **Create**: upload the workbook, review the parsed summary (batches, sample
   counts, low-volume tubes, any warnings), confirm the three destination set
@@ -140,6 +141,9 @@ edited or deleted.
 `samples` and `tubes` are a projection of the log, written in the same
 transaction as the events that change them, so they can never disagree.
 
+`migrations/0002_admin_passkeys.sql` adds `admin_passkeys` and
+`admin_invites` (see [Admins](#admins)).
+
 ### Actions and ordering
 
 All changes go through `POST /api/jobs/<code>/actions`. Each action runs in
@@ -208,6 +212,40 @@ Logged event types: `job_created`, `participant_joined`, `participant_left`,
   did what and when for every step) and the complete event log; the log is
   also available as CSV.
 
+## Admins
+
+A job's code is its only gate, and nothing in the app lists the jobs. Admins
+are the exception: they sign in at `/admin` and see every job.
+
+- **Passkeys only.** An admin signs in with a passkey (WebAuthn): no
+  password and no username. `admin_passkeys` holds each passkey's public
+  key and the name its owner gave. A passkey is bound to the site's
+  hostname (`APP_ORIGIN`) and works nowhere else, and it must verify its
+  owner (fingerprint, face or PIN) every time.
+- **By invitation.** There is no sign-up. A passkey is added by opening an
+  invite link, `/admin/invite/<token>`, entering a name and creating the
+  passkey, which also signs its owner in. A link works once and expires 10
+  minutes after it is made. Opening it does not spend it; adding the
+  passkey does. `admin_invites` stores only the SHA-256 of the token. Any
+  admin can make a link on the admin page. The first link comes from
+  `scripts/admin-invite-sql.ts` (see deploy.md), which is also the way back
+  in if every passkey is lost.
+- **Sessions.** Signing in sets an HttpOnly, SameSite=Lax cookie holding a
+  token (HS256, `APP_SECRET`) that names the passkey and lasts 12 hours.
+  Every admin request looks the passkey up again, so removing a passkey
+  ends its sessions at once. While a passkey prompt is open, its challenge
+  waits in a second signed cookie (5 minutes); the server stores nothing
+  for it.
+- **Removing an admin.** The admin page lists the passkeys and who invited
+  each. An admin can remove any passkey except the one they are signed in
+  with, so removing passkeys never leaves the site without an admin. A
+  removed passkey stays in the table, marked revoked.
+- **One address.** Requests to `/api/admin` from a browser at any other
+  origin are refused, because a passkey made there would not work here.
+
+The admin page lists every job: code, creator, how many samples are
+aliquoted, how many people are online, and when it was last active.
+
 ## Seeding the first job
 
 The workbook's sample data does not go in the repository.
@@ -217,5 +255,5 @@ applied with `psql`. Creating a job through the web UI does the same thing.
 
 ## Out of scope
 
-Accounts and permissions beyond the job code; photos; offline operation
+Accounts and permissions for operators beyond the job code; photos; offline operation
 beyond retrying; editing a job's pull list after creation.

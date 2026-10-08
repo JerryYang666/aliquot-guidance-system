@@ -33,6 +33,12 @@ export default function HomePage() {
           </div>
         </div>
       </Link>
+      <Link
+        href="/admin"
+        className="self-center text-sm text-slate-500 underline"
+      >
+        Admin
+      </Link>
     </main>
   );
 }

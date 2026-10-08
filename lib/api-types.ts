@@ -115,3 +115,37 @@ export interface TicketResponse {
   url: string | null;
   ticket: string | null;
 }
+
+/** A job as the admin page lists it. */
+export interface AdminJob {
+  code: string;
+  name: string;
+  createdBy: string;
+  createdAt: string;
+  batches: number;
+  samples: number;
+  finished: number;
+  online: number;
+  lastActivityAt: string | null;
+}
+
+/** A passkey that can sign in as an admin. */
+export interface AdminPasskey {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  /** Who made the invite it was added with; null for a seeded invite. */
+  invitedBy: string | null;
+}
+
+export interface AdminOverviewResponse {
+  jobs: AdminJob[];
+  passkeys: AdminPasskey[];
+}
+
+export interface AdminInviteResponse {
+  /** The link's path on this site: /admin/invite/<token>. */
+  path: string;
+  expiresAt: string;
+}

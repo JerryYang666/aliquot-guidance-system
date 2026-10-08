@@ -2,12 +2,10 @@
  * Runs the actions layer against a real Postgres with the real migrations.
  * Needs TEST_DATABASE_URL (a database this suite may wipe); skipped without it.
  */
-import { readdirSync, readFileSync } from "node:fs";
-import path from "node:path";
-
 import { asc, eq } from "drizzle-orm";
-import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { closeDatabase, resetDatabase } from "./database";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -34,16 +32,7 @@ describe.skipIf(!url)("pipeline against Postgres", () => {
   }
 
   beforeAll(async () => {
-    process.env.DATABASE_URL = url;
-    process.env.APP_SECRET ??= "test-secret-test-secret-test-secret-0123";
-    const client = new pg.Client({ connectionString: url });
-    await client.connect();
-    await client.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
-    const dir = path.join(process.cwd(), "migrations");
-    for (const file of readdirSync(dir).sort()) {
-      await client.query(readFileSync(path.join(dir, file), "utf8"));
-    }
-    await client.end();
+    await resetDatabase(url!);
 
     mod = await load();
     const db = mod.db.getDb();
@@ -102,11 +91,7 @@ describe.skipIf(!url)("pipeline against Postgres", () => {
     }
   });
 
-  afterAll(async () => {
-    const pool = (globalThis as { agsDb?: { $client: pg.Pool } }).agsDb
-      ?.$client;
-    await pool?.end();
-  });
+  afterAll(closeDatabase);
 
   const as = (role: string) => tokens[role]!.participant;
 

@@ -8,7 +8,7 @@ function secret(name: string): Uint8Array {
   return new TextEncoder().encode(value);
 }
 
-/** Signs participant tokens. */
+/** Signs participant tokens and admin sessions. */
 export const appSecret = () => secret("APP_SECRET");
 
 /**
@@ -26,4 +26,18 @@ export function relayConfig(): {
     process.env.RELAY_INTERNAL_URL ?? publicUrl?.replace(/^ws/, "http");
   if (!publicUrl || !internalUrl || !process.env.RELAY_SECRET) return null;
   return { publicUrl, internalUrl, secret: secret("RELAY_SECRET") };
+}
+
+/**
+ * The site's public origin, such as https://aliquot.example.org. Passkeys
+ * are bound to its hostname, so admins sign in at this address only. In
+ * development it defaults to wherever the request arrived.
+ */
+export function appOrigin(request: Request): string {
+  const configured = process.env.APP_ORIGIN;
+  if (configured) return new URL(configured).origin;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("APP_ORIGIN must be set for admins to sign in");
+  }
+  return new URL(request.url).origin;
 }

@@ -13,8 +13,9 @@ with a team of three, each at their own screen:
 
 Screens stay in sync within a fraction of a second, work by keyboard and
 camera so gloved hands rarely touch them, and every action lands in an
-append-only log with millisecond times. There are no accounts: a job is
-created from the lab's aliquot workbook and joined with its 8-letter code.
+append-only log with millisecond times. Operators have no accounts: a job
+is created from the lab's aliquot workbook and joined with its 8-letter
+code. Admins, who see every job, sign in with a passkey.
 
 Read [docs/design.md](docs/design.md) for how it works and
 [docs/deploy.md](docs/deploy.md) to run it.
@@ -35,7 +36,14 @@ Needs Node.js 24, Postgres 14+ and, for the relay, Go 1.24.
 npm install
 cp .env.example .env.local      # set DATABASE_URL and APP_SECRET; leave RELAY_* empty to poll
 psql "<your DATABASE_URL>" -f migrations/0001_init.sql
+psql "<your DATABASE_URL>" -f migrations/0002_admin_passkeys.sql
 npm run dev                     # http://localhost:3000
+```
+
+To use the admin page locally, make an invite link and open it:
+
+```sh
+npm run --silent admin-invite-sql -- --origin http://localhost:3000 | psql "<your DATABASE_URL>"
 ```
 
 To run with live updates, start the relay and set `RELAY_*` in `.env.local`
@@ -67,16 +75,18 @@ TEST_DATABASE_URL=postgres://localhost/ags_test npm test
 
 ## Layout
 
-| Path                  | What                                                                     |
-| --------------------- | ------------------------------------------------------------------------ |
-| `app/`                | Pages (home, create, join, station, log) and API routes under `app/api/` |
-| `components/station/` | The four role screens and the station shell                              |
-| `components/scanner/` | Camera and keyboard-wedge scanning                                       |
-| `lib/pipeline/`       | Pure rules: queue order, actions, scan decisions, labels, box layouts    |
-| `lib/server/`         | Server side: tokens, the actions transaction, exports, relay publishing  |
-| `lib/client/`         | Browser side: API calls, sync in version order, wake lock, feedback      |
-| `lib/workbook/`       | Reading and validating aliquot workbooks                                 |
-| `migrations/`         | SQL schema, applied by hand in order                                     |
-| `realtime/`           | The Go relay                                                             |
-| `deploy/relay/`       | Docker Compose + Caddy for the relay host                                |
-| `scripts/`            | `workbook-to-seed-sql.ts` (seed a job without the UI)                    |
+| Path                  | What                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `app/`                | Pages (home, create, join, station, log, admin) and API routes under `app/api/`                              |
+| `components/station/` | The four role screens and the station shell                                                                  |
+| `components/admin/`   | Admin sign-in, the invite page, and the list of jobs and admins                                              |
+| `components/scanner/` | Camera and keyboard-wedge scanning                                                                           |
+| `lib/pipeline/`       | Pure rules: queue order, actions, scan decisions, labels, box layouts                                        |
+| `lib/server/`         | Server side: tokens, the actions transaction, exports, relay publishing                                      |
+| `lib/server/admin/`   | Admin passkeys, invite links and sessions                                                                    |
+| `lib/client/`         | Browser side: API calls, sync in version order, wake lock, feedback                                          |
+| `lib/workbook/`       | Reading and validating aliquot workbooks                                                                     |
+| `migrations/`         | SQL schema, applied by hand in order                                                                         |
+| `realtime/`           | The Go relay                                                                                                 |
+| `deploy/relay/`       | Docker Compose + Caddy for the relay host                                                                    |
+| `scripts/`            | `workbook-to-seed-sql.ts` (seed a job without the UI), `admin-invite-sql.ts` (the first admin's invite link) |
