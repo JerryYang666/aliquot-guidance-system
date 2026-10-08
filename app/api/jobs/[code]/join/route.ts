@@ -7,6 +7,7 @@ import { getJobByCode } from "@/lib/server/jobs";
 import { joinJob, joinRequestSchema } from "@/lib/server/participants";
 import { publishChange } from "@/lib/server/realtime";
 import { parseBody, type CodeContext } from "@/lib/server/route";
+import { optionalParticipant } from "@/lib/server/tokens";
 
 export const POST = handle(async (request: Request, context: CodeContext) => {
   const db = getDb();
@@ -17,15 +18,19 @@ export const POST = handle(async (request: Request, context: CodeContext) => {
     job.id,
     input,
     request.headers.get("user-agent"),
+    await optionalParticipant(request, job.code),
   );
-  after(() =>
-    publishChange(job.id, {
-      type: "change",
-      version: result.version,
-      samples: [],
-      events: result.events,
-    }),
-  );
+  // A join sent twice is recorded, and announced, once.
+  if (result.events.length) {
+    after(() =>
+      publishChange(job.id, {
+        type: "change",
+        version: result.version,
+        samples: [],
+        events: result.events,
+      }),
+    );
+  }
   const { participantId, name, role, batchNumber } = result.participant;
   return json({
     token: result.token,

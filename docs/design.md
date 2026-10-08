@@ -42,10 +42,14 @@ accounts; only admins sign in (see [Admins](#admins)).
   by pointing the camera at it. 23⁸ ≈ 7.8·10¹⁰ codes make guessing
   impractical; the code is the only gate, by design.
 - **Join**: enter the code, your **name**, the **batch**, and a **role**
-  (Puller, Labeler, Aliquoter, or Overview). The join is logged. The server
-  returns a signed participant token (HS256, `APP_SECRET`) kept in the tab's
-  `sessionStorage`, so each tab is its own station and every action is
-  attributed to the name given at join. The name is remembered in
+  (Puller, Labeler, Aliquoter, or Overview). A batch has one Puller, one
+  Labeler and one Aliquoter at a time: a role that someone online already
+  holds is shown as taken, and the server refuses a second join to it. The
+  role frees up when its holder leaves, or about a minute after their screen
+  goes quiet. Overview is open to any number of people. The join is logged.
+  The server returns a signed participant token (HS256, `APP_SECRET`) kept
+  in the tab's `sessionStorage`, so each tab is its own station and every
+  action is attributed to the name given at join. The name is remembered in
   `localStorage` to prefill the next join.
 
 ## Pipeline rules

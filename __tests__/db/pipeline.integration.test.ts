@@ -2,7 +2,7 @@
  * Runs the actions layer against a real Postgres with the real migrations.
  * Needs TEST_DATABASE_URL (a database this suite may wipe); skipped without it.
  */
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { closeDatabase, resetDatabase } from "./database";
@@ -280,6 +280,81 @@ describe.skipIf(!url)("pipeline against Postgres", () => {
       "Lee",
       "Lee",
     ]);
+  });
+
+  it("gives each working role on a batch to one person at a time", async () => {
+    const db = mod.db.getDb();
+    const job = await mod.jobs.getJobByCode(db, code);
+    const join = (
+      name: string,
+      role: "puller" | "labeler" | "aliquoter" | "overview",
+      batchNumber = 1,
+      more: { attempt?: string; current?: typeof tokens.puller } = {},
+    ) =>
+      mod.participants.joinJob(
+        db,
+        job.id,
+        { name, role, batchNumber, attempt: more.attempt },
+        "vitest",
+        more.current?.participant ?? null,
+      );
+    const count = async () =>
+      (await db.select().from(mod.schema.participants)).length;
+
+    // Pat is the Puller on batch 1; a second Puller is turned away, and
+    // nothing is recorded of the attempt.
+    const before = { people: await count(), version: job.version };
+    await expect(join("Sam", "puller")).rejects.toMatchObject({
+      status: 409,
+      code: "role_taken",
+      message: expect.stringContaining("Pat is already the Puller on batch 1"),
+    });
+    expect(await count()).toBe(before.people);
+    expect((await mod.jobs.getJobByCode(db, code)).version).toBe(
+      before.version,
+    );
+
+    // Another batch is another set of stations, and Overview is open to all.
+    const sam = await join("Sam", "puller", 2);
+    await join("Olive", "overview");
+    await join("Omar", "overview");
+
+    // Leaving frees the role at once.
+    await expect(join("Kim", "puller", 2)).rejects.toMatchObject({
+      code: "role_taken",
+    });
+    await mod.participants.leaveJob(db, sam.participant);
+    const kim = await join("Kim", "puller", 2);
+
+    // So does going quiet for longer than the online window.
+    await expect(join("Lou", "labeler")).rejects.toMatchObject({
+      code: "role_taken",
+    });
+    await db
+      .update(mod.schema.participants)
+      .set({ lastSeenAt: sql`clock_timestamp() - interval '2 minutes'` })
+      .where(eq(mod.schema.participants.id, as("labeler").participantId));
+    await join("Lou", "labeler");
+
+    // A tab that already holds the station can join again in its place.
+    await expect(join("Kim", "puller", 2)).rejects.toMatchObject({
+      code: "role_taken",
+    });
+    const again = await join("Kim K.", "puller", 2, { current: kim });
+    expect(again.participant.participantId).not.toBe(
+      kim.participant.participantId,
+    );
+    await mod.participants.leaveJob(db, kim.participant);
+
+    // A join that is sent twice is one join: same station, logged once.
+    await mod.participants.leaveJob(db, again.participant);
+    const attempt = crypto.randomUUID();
+    const first = await join("Ray", "puller", 2, { attempt });
+    const people = await count();
+    const retried = await join("Ray", "puller", 2, { attempt });
+    expect(retried.participant).toEqual(first.participant);
+    expect(retried.events).toEqual([]);
+    expect(await count()).toBe(people);
   });
 
   it("keeps versions gapless and the log append-only", async () => {

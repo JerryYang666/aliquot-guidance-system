@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import type { JobSummaryResponse, JoinResponse } from "@/lib/api-types";
 import { api, ApiFailure } from "@/lib/client/api";
+import { randomId } from "@/lib/client/ids";
 import {
   parseSession,
   rememberedName,
@@ -31,6 +32,8 @@ const ROLE_INFO: { role: Role; text: string }[] = [
   { role: "overview", text: "Watches progress and fixes mistakes." },
 ];
 
+const REFRESH_MS = 10_000;
+
 export function JoinForm({ code }: { code: string }) {
   const router = useRouter();
   const existing = parseSession(useStoredSessionRaw(code));
@@ -42,22 +45,34 @@ export function JoinForm({ code }: { code: string }) {
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The job, and again every few seconds: which roles are free changes as
+  // people come and go.
   useEffect(() => {
     let cancelled = false;
-    api<JobSummaryResponse>(`/api/jobs/${code}`)
-      .then((s) => {
-        if (cancelled) return;
-        setSummary(s);
-        setName((n) => n || rememberedName());
-      })
-      .catch((e: unknown) => {
-        if (!cancelled)
+    let loaded = false;
+    const load = () =>
+      api<JobSummaryResponse>(`/api/jobs/${code}`, { retry: !loaded }).then(
+        (s) => {
+          if (cancelled) return;
+          setSummary(s);
+          if (!loaded) setName((n) => n || rememberedName());
+          loaded = true;
+        },
+        (e: unknown) => {
+          // A refresh that fails leaves what is on the screen.
+          if (cancelled || loaded) return;
           setLoadError(
             e instanceof ApiFailure ? e.message : "Could not load the job.",
           );
-      });
+        },
+      );
+    void load();
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, REFRESH_MS);
     return () => {
       cancelled = true;
+      clearInterval(id);
     };
   }, [code]);
 
@@ -76,13 +91,33 @@ export function JoinForm({ code }: { code: string }) {
     setError(null);
     try {
       const r = await api<JoinResponse>(`/api/jobs/${code}/join`, {
-        body: { name: name.trim(), role, batchNumber: chosenBatch },
+        // Sent with the station this tab already holds, so that one does
+        // not count as someone else in the role.
+        token: existing?.token,
+        body: {
+          name: name.trim(),
+          role,
+          batchNumber: chosenBatch,
+          attempt: randomId(),
+        },
       });
+      if (existing) {
+        await api(`/api/jobs/${code}/leave`, {
+          method: "POST",
+          token: existing.token,
+        }).catch(() => undefined);
+      }
       saveSession(code, { token: r.token, me: r.me });
       router.push(`/j/${code}/station`);
     } catch (e) {
       setError(e instanceof ApiFailure ? e.message : "Could not join.");
       setJoining(false);
+      if (e instanceof ApiFailure && e.code === "role_taken") {
+        void api<JobSummaryResponse>(`/api/jobs/${code}`).then(
+          setSummary,
+          () => undefined,
+        );
+      }
     }
   };
 
@@ -98,6 +133,20 @@ export function JoinForm({ code }: { code: string }) {
     );
   }
   if (!summary) return <p className="text-slate-500">Loading job…</p>;
+
+  // Who holds a working role on the chosen batch, if anyone does. Overview
+  // is open to any number of people, and this tab's own station is not in
+  // its way: joining from here replaces it.
+  const holderOf = (r: Role) =>
+    r === "overview"
+      ? undefined
+      : summary.online.find(
+          (p) =>
+            p.role === r &&
+            p.batchNumber === chosenBatch &&
+            p.id !== existing?.me.participantId,
+        );
+  const roleIsFree = role !== null && !holderOf(role);
 
   return (
     <form onSubmit={join} className="flex flex-col gap-5">
@@ -172,23 +221,29 @@ export function JoinForm({ code }: { code: string }) {
         <div className="grid gap-2 sm:grid-cols-2">
           {ROLE_INFO.map(({ role: r, text }) => {
             const Icon = ROLE_ICONS[r];
+            const holder = holderOf(r);
             return (
               <button
                 key={r}
                 type="button"
                 onClick={() => setRole(r)}
-                aria-pressed={role === r}
+                disabled={Boolean(holder)}
+                aria-pressed={role === r && !holder}
                 className={cx(
                   "flex items-start gap-3 rounded-xl p-4 text-left ring-1",
-                  role === r
-                    ? "bg-slate-900 text-white ring-slate-900"
-                    : "bg-white ring-slate-200 hover:ring-slate-400",
+                  holder
+                    ? "cursor-not-allowed bg-slate-50 text-slate-400 ring-slate-200"
+                    : role === r
+                      ? "bg-slate-900 text-white ring-slate-900"
+                      : "bg-white ring-slate-200 hover:ring-slate-400",
                 )}
               >
                 <Icon className="mt-0.5 size-6 shrink-0" />
                 <span>
                   <span className="block font-semibold">{ROLE_LABELS[r]}</span>
-                  <span className="text-sm opacity-80">{text}</span>
+                  <span className="text-sm opacity-80">
+                    {holder ? `Taken by ${holder.name}.` : text}
+                  </span>
                 </span>
               </button>
             );
@@ -201,7 +256,7 @@ export function JoinForm({ code }: { code: string }) {
         type="submit"
         variant="primary"
         size="xl"
-        disabled={joining || !role || !name.trim() || !chosenBatch}
+        disabled={joining || !roleIsFree || !name.trim() || !chosenBatch}
       >
         {joining ? "Joining…" : "Start"}
       </Button>

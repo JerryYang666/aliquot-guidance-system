@@ -60,6 +60,22 @@ export async function verifyParticipantToken(
   }
 }
 
+/**
+ * The station a request's tab already holds on this job, or null. For calls
+ * that work without one, such as joining.
+ */
+export async function optionalParticipant(
+  request: Request,
+  code: string,
+): Promise<Participant | null> {
+  const header = request.headers.get("authorization");
+  if (!header?.startsWith("Bearer ")) return null;
+  const participant = await verifyParticipantToken(header.slice(7)).catch(
+    () => null,
+  );
+  return participant?.code === code ? participant : null;
+}
+
 /** The participant behind a request, from the Authorization header (or ?t= for downloads). */
 export async function requireParticipant(
   request: Request,

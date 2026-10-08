@@ -50,6 +50,8 @@ export interface CreateJobResponse {
 export interface JobSummaryResponse {
   job: Omit<JobInfo, "id">;
   batches: BatchListItem[];
+  /** Who is on the job now, so the join screen can show which roles are taken. */
+  online: OnlineParticipant[];
 }
 
 export interface JoinResponse {

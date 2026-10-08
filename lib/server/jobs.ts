@@ -19,6 +19,15 @@ import { toIso, toSample } from "./rows";
 
 export const ONLINE_WINDOW_SECONDS = 75;
 
+/** Online: has not left, and was heard from within the window. */
+export const isOnline = and(
+  isNull(participants.leftAt),
+  gt(
+    participants.lastSeenAt,
+    sql`clock_timestamp() - make_interval(secs => ${ONLINE_WINDOW_SECONDS})`,
+  ),
+);
+
 export async function getJobByCode(
   db: DbOrTx,
   rawCode: string,
@@ -104,15 +113,6 @@ export async function onlineParticipants(
       batchNumber: participants.batchNumber,
     })
     .from(participants)
-    .where(
-      and(
-        eq(participants.jobId, jobId),
-        isNull(participants.leftAt),
-        gt(
-          participants.lastSeenAt,
-          sql`clock_timestamp() - make_interval(secs => ${ONLINE_WINDOW_SECONDS})`,
-        ),
-      ),
-    )
+    .where(and(eq(participants.jobId, jobId), isOnline))
     .orderBy(asc(participants.joinedAt));
 }
