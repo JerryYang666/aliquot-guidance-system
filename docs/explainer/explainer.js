@@ -757,7 +757,7 @@
       let srcLevel = 0.82;
       const levels = [0, 0, 0];
       let pipX = 560;
-      let pipY = 380;
+      let pipY = 440;
       let pipFill = 0;
       for (let k = 0; k < 3; k++) {
         const t0 = T.pip + k * cycle;
@@ -774,7 +774,8 @@
           ]);
           const dip = pulse(t, t0, 0.55) * 120 + pulse(t, t0 + 0.75, 0.4) * 110;
           pipX = x;
-          pipY = 330 + dip;
+          // Low and small enough to stay clear of the heading.
+          pipY = 440 + dip;
           pipFill = draw - give;
         }
       }
@@ -782,6 +783,7 @@
         x: pipX,
         y: pipY,
         ay: 1,
+        s: 0.75,
         o: vis(t, T.pip - 0.5, T.pip + 3 * cycle + 0.1),
       });
       r.pip.fill(pipFill);
@@ -802,7 +804,7 @@
       });
       r.news.forEach((tb, k) => {
         tb.level(levels[k]);
-        const appear = p(t, T.split + 0.3 + k * 0.12, 0.5, ease.back);
+        const appear = p(t, T.split + 0.6 + k * 0.12, 0.5, ease.back);
         const cell = cellOnStage(r.dest[k], "G6", destX[k], destY);
         const fly = p(t, T.fly[k], 0.75);
         const x = lerp(tubeX[k], cell.x, fly);
