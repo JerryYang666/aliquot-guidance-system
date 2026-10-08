@@ -433,17 +433,29 @@ export function AliquoterView({
   );
 }
 
-/** A source tube to look for: its original ID, large, and what it becomes. */
+/**
+ * A source tube to look for: its original ID, largest, then the new ID and
+ * slot. Those two are checked against the new tubes before pipetting; a
+ * scan would only catch the wrong tube after it has been filled.
+ */
 function SourceTube({ label, sample }: { label: string; sample: Sample }) {
+  const value =
+    "font-mono text-5xl leading-none font-bold tracking-tight sm:text-6xl";
   return (
     <div>
       <Label>{label}</Label>
       <div className="font-mono text-6xl font-bold tracking-tight sm:text-7xl">
         {sample.originalId}
       </div>
-      <div className="mt-1 text-slate-600">
-        New ID <span className="font-mono font-semibold">{sample.newId}</span> ·
-        slot <span className="font-mono font-semibold">{sample.slot}</span>
+      <div className="mt-3 flex flex-wrap gap-x-8 gap-y-2">
+        <div>
+          <div className="text-sm text-slate-500">New ID</div>
+          <div className={value}>{sample.newId}</div>
+        </div>
+        <div>
+          <div className="text-sm text-slate-500">Slot</div>
+          <div className={value}>{sample.slot}</div>
+        </div>
       </div>
     </div>
   );
