@@ -58,7 +58,7 @@ const actionSchema = z.discriminatedUnion("type", [
     note: z.string().max(MAX_NOTE_LENGTH).optional(),
   }),
   z.object({
-    type: z.literal("undo_tube"),
+    type: z.enum(["undo_tube", "not_filled"]),
     sampleId: id,
     tube: z.number().int().min(1).max(9),
   }),

@@ -54,7 +54,11 @@ type ScanView =
   | { id: string; kind: "checking"; label: string };
 
 type Dialog =
-  { kind: "finish" } | { kind: "note" } | { kind: "undo"; tube: number } | null;
+  | { kind: "finish" }
+  | { kind: "note" }
+  | { kind: "undo"; tube: number }
+  | { kind: "not_filled"; tube: number }
+  | null;
 
 export function AliquoterView({
   snapshot,
@@ -202,6 +206,12 @@ export function AliquoterView({
     setDialog(null);
   };
 
+  const markNotFilled = async (tube: number) => {
+    if (!current) return;
+    await perform({ type: "not_filled", sampleId: current.id, tube });
+    setDialog(null);
+  };
+
   // The next sample coming this way: first in queue order not yet ready.
   const waitingFor = queueOrder(samples).find(
     (s) => !isFinished(s) && !isReady(s),
@@ -228,6 +238,7 @@ export function AliquoterView({
             boxNumber={boxNumber}
             busy={busy}
             onUndoTube={(tube) => setDialog({ kind: "undo", tube })}
+            onNotFilled={(tube) => setDialog({ kind: "not_filled", tube })}
             onFinish={() => setDialog({ kind: "finish" })}
             onNote={() => setDialog({ kind: "note" })}
           />
@@ -381,6 +392,30 @@ export function AliquoterView({
           </p>
         </Modal>
       )}
+
+      {dialog?.kind === "not_filled" && current && (
+        <Modal
+          title={`${labelFor(current.newId, dialog.tube)} not filled?`}
+          onClose={() => setDialog(null)}
+          footer={
+            <>
+              <Button onClick={() => setDialog(null)}>Cancel</Button>
+              <Button
+                variant="primary"
+                onClick={() => void markNotFilled(dialog.tube)}
+                disabled={busy}
+              >
+                Not filled
+              </Button>
+            </>
+          }
+        >
+          <p className="text-slate-700">
+            It is recorded as not filled, and scanning one of the other tubes
+            places only those. Tap it again to undo.
+          </p>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -458,6 +493,7 @@ function CurrentSample({
   boxNumber,
   busy,
   onUndoTube,
+  onNotFilled,
   onFinish,
   onNote,
 }: {
@@ -466,6 +502,8 @@ function CurrentSample({
   boxNumber: number;
   busy: boolean;
   onUndoTube: (tube: number) => void;
+  /** A tube that could not be filled, set aside before the scan places the rest. */
+  onNotFilled: (tube: number) => void;
   onFinish: () => void;
   onNote: () => void;
 }) {
@@ -484,8 +522,10 @@ function CurrentSample({
             <button
               key={n}
               type="button"
-              disabled={tube.status === "pending" || busy}
-              onClick={() => onUndoTube(n)}
+              disabled={busy}
+              onClick={() =>
+                tube.status === "pending" ? onNotFilled(n) : onUndoTube(n)
+              }
               className={cx(
                 "rounded-xl p-3 text-left",
                 tube.status === "placed" && color.solid,
@@ -494,7 +534,11 @@ function CurrentSample({
                 tube.status === "not_filled" &&
                   "bg-slate-200 text-slate-500 line-through",
               )}
-              title={tube.status === "pending" ? undefined : "Tap to undo"}
+              title={
+                tube.status === "pending"
+                  ? "Tap if this tube was not filled"
+                  : "Tap to undo"
+              }
             >
               <div className="flex items-center justify-between font-mono text-lg font-bold">
                 -{n}
@@ -511,6 +555,9 @@ function CurrentSample({
           );
         })}
       </div>
+      <p className="-mt-2 text-sm text-slate-500">
+        Could not fill a tube? Tap it before you scan.
+      </p>
       <div className="flex flex-wrap gap-2">
         <Button onClick={onFinish} disabled={busy}>
           Finish sample…

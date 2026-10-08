@@ -17,6 +17,7 @@ export type SampleAction =
   | { type: "finish"; sampleId: string; note?: string }
   | { type: "reopen"; sampleId: string }
   | { type: "undo_tube"; sampleId: string; tube: number }
+  | { type: "not_filled"; sampleId: string; tube: number }
   | { type: "return"; sampleId: string }
   | { type: "undo_return"; sampleId: string }
   | { type: "note"; sampleId: string; text: string };
@@ -259,6 +260,36 @@ export function applySampleAction(
         sample: s,
         events: [sampleEvent(s, "tube_undone", previous, action.tube)],
       };
+    }
+
+    case "not_filled": {
+      // Before the scan: a scan places every pending tube, so a tube that
+      // could not be filled is set aside first.
+      const tube = s.tubes[action.tube - 1];
+      if (!tube) return fail("bad_tube", `${id} has no tube ${action.tube}.`);
+      if (tube.status !== "pending")
+        return fail(
+          "tube_done",
+          `${labelFor(id, action.tube)} is already ${tube.status === "placed" ? "placed" : "recorded as not filled"}.`,
+        );
+      s.tubes[action.tube - 1] = {
+        ...tube,
+        status: "not_filled",
+        at: now,
+        by: actor,
+      };
+      const events = [sampleEvent(s, "tube_not_filled", {}, action.tube)];
+      if (s.tubes.every((t) => t.status !== "pending")) {
+        s.finishedAt = now;
+        s.finishedBy = actor;
+        const notFilled = s.tubes.flatMap((t, i) =>
+          t.status === "not_filled" ? [i + 1] : [],
+        );
+        events.push(
+          sampleEvent(s, "sample_finished", { auto: true, notFilled }),
+        );
+      }
+      return { ok: true, sample: s, events };
     }
 
     case "return":

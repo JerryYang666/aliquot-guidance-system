@@ -473,6 +473,40 @@ describe.skipIf(!url)("pipeline against Postgres", () => {
     await mod.participants.leaveJob(db, there);
   });
 
+  it("sets a low-volume tube aside before the scan places the rest", async () => {
+    // S0003 ("Very low") is pulled and labeled by now. Its -3 cannot be
+    // filled: the Aliquoter says so first, then one scan does the rest.
+    const s3 = await sample("S0003");
+    const set = await act("aliquoter", {
+      type: "not_filled",
+      sampleId: s3.id,
+      tube: 3,
+    });
+    expect(set.events.map((e) => [e.type, e.tube, e.actorName])).toEqual([
+      ["tube_not_filled", 3, "Ali"],
+    ]);
+    await expect(
+      act("aliquoter", { type: "not_filled", sampleId: s3.id, tube: 3 }),
+    ).rejects.toMatchObject({ status: 409, code: "tube_done" });
+
+    const r = await act("aliquoter", {
+      type: "scan",
+      label: "S0003-2",
+      currentSampleId: s3.id,
+    });
+    expect(r.scan).toMatchObject({
+      kind: "place",
+      tubes: [2, 1],
+      sampleFinished: true,
+    });
+    const done = await sample("S0003");
+    expect(done.tubes.map((t) => t.status)).toEqual([
+      "placed",
+      "placed",
+      "not_filled",
+    ]);
+  });
+
   it("lets one person hold each working role on a batch while others wait", async () => {
     const db = mod.db.getDb();
     const job = await mod.jobs.getJobByCode(db, code);

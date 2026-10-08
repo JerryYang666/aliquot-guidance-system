@@ -48,6 +48,8 @@ export function describeEvent(e: LogEvent): string {
     }
     case "tube_undone":
       return `undid ${tube}`;
+    case "tube_not_filled":
+      return `recorded ${tube} as not filled`;
     case "scan_repeated":
       return `scanned ${tube} again (${str(d.destination)})`;
     case "scan_rejected":

@@ -162,8 +162,11 @@ Letter shortcuts ignore Shift, so a scanner typing `S0066-1` does not trigger
 Volume notes from the workbook (`Low`, `Very low`, …) appear as a warning badge
 on all three roles' screens for that sample. The system does not enforce
 anything. A scan places all of the sample's pending tubes, so a tube that
-was not filled is put right afterwards: undo it, then finish the sample,
-which records it as not filled, optionally with a note.
+could not be filled is set aside first: the aliquoter taps it on the screen
+(`tube_not_filled`), then scans one of the others, which places only those.
+Forgotten, it is put right afterwards on Overview: undo the tube, then
+finish the sample. With nothing filled, **Finish sample** records all three
+as not filled, optionally with a note.
 
 ### Corrections
 
@@ -173,7 +176,8 @@ edited or deleted.
 - Puller: undo last pull (`←`) while no tube of that sample is placed; undo
   a return; skip a sample (`S`).
 - Labeler: undo last label (`←`) while no tube is placed; skip a sample.
-- Aliquoter: undo a tube placement; reopen a finished sample.
+- Aliquoter: mark a tube not filled before the scan; undo a tube placement
+  or a tube marked not filled; reopen a finished sample.
 - Anyone: add a note to a sample.
 
 ## Data model (Postgres)
@@ -216,7 +220,7 @@ double-log.
 
 Logged event types: `job_created`, `participant_joined`, `participant_left`,
 `participant_moved`, `sample_pulled`, `sample_labeled`, `sample_skipped`, `label_scanned`,
-`label_scan_repeated`, `label_scan_rejected`, `tube_placed`,
+`label_scan_repeated`, `label_scan_rejected`, `tube_placed`, `tube_not_filled`,
 `scan_repeated`, `scan_rejected`, `sample_finished`, `sample_returned`,
 `note_added`, and an `*_undone` / `sample_reopened` entry for each reversal.
 

@@ -102,6 +102,7 @@ export type EventType =
   | "sample_skipped"
   | "tube_placed"
   | "tube_undone"
+  | "tube_not_filled"
   | "scan_repeated"
   | "scan_rejected"
   | "sample_finished"

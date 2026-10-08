@@ -142,6 +142,54 @@ describe("aliquoter actions", () => {
     });
   });
 
+  it("sets a tube aside as not filled, so the scan places only the rest", () => {
+    const s = makeSample({ pulledAt: T0, labeledAt: T0 });
+    const r = ok(
+      applySampleAction(s, { type: "not_filled", sampleId: "x", tube: 3 }, ctx),
+    );
+    expect(r.sample.tubes[2]).toEqual({
+      status: "not_filled",
+      at: T1,
+      by: "Ana",
+    });
+    expect(r.sample.finishedAt).toBeNull();
+    expect(r.events).toMatchObject([{ type: "tube_not_filled", tube: 3 }]);
+
+    const scanned = applyPlacement(r.sample, 1, placeCtx);
+    expect(scanned.sample.tubes.map((t) => t.status)).toEqual([
+      "placed",
+      "placed",
+      "not_filled",
+    ]);
+    expect(scanned.events.map((e) => [e.type, e.tube])).toEqual([
+      ["tube_placed", 1],
+      ["tube_placed", 2],
+      ["sample_finished", null],
+    ]);
+  });
+
+  it("finishes a sample whose last pending tube is not filled", () => {
+    const s = makeSample({ pulledAt: T0, labeledAt: T0 });
+    s.tubes = [placed(), notFilled(), ...s.tubes.slice(2)];
+    const r = ok(
+      applySampleAction(s, { type: "not_filled", sampleId: "x", tube: 3 }, ctx),
+    );
+    expect(r.sample.finishedAt).toBe(T1);
+    expect(r.events.map((e) => [e.type, e.data])).toEqual([
+      ["tube_not_filled", {}],
+      ["sample_finished", { auto: true, notFilled: [2, 3] }],
+    ]);
+  });
+
+  it("only sets aside a tube that is still pending", () => {
+    const s = makeSample({ pulledAt: T0, labeledAt: T0 });
+    s.tubes[0] = placed();
+    const notFilledAction = (tube: number) =>
+      applySampleAction(s, { type: "not_filled", sampleId: "x", tube }, ctx);
+    expect(errorCode(notFilledAction(1))).toBe("tube_done");
+    expect(errorCode(notFilledAction(4))).toBe("bad_tube");
+  });
+
   it("refuses to change a returned sample until the return is undone", () => {
     const s = makeSample({
       pulledAt: T0,
