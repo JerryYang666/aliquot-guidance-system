@@ -3,8 +3,8 @@
 import { useEffect, useRef } from "react";
 
 /**
- * Station shortcuts (Space, arrows, Enter, letters). Held keys do not
- * repeat, and typing in a form field or a scanner's shifted capitals never
+ * Station shortcuts (Space, arrows, Enter, lowercase letters). Held keys
+ * do not repeat, and typing in a form field or a scanner's capitals never
  * triggers them.
  */
 export function useHotkeys(
@@ -28,11 +28,10 @@ export function useHotkeys(
         )
       )
         return;
-      // A barcode scanner types labels like "S0066-1" with Shift held for
-      // capitals; letter shortcuts are plain keys, so shifted ones are text.
-      if (e.shiftKey && e.key.length === 1 && e.key !== " ") return;
-      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-      const handler = ref.current[key];
+      // Letters match exactly: "s" is a shortcut, "S" is text. A barcode
+      // scanner types labels like "S0066-1" in capitals (with or without
+      // reporting Shift), so it never triggers a lowercase shortcut.
+      const handler = ref.current[e.key];
       if (!handler) return;
       e.preventDefault();
       handler();
