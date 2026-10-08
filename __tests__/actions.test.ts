@@ -278,6 +278,59 @@ describe("scan decisions", () => {
       scan("S0067-1", { currentSample: { ...current, finishedAt: T0 } }),
     ).toMatchObject({ kind: "place" });
   });
+
+  describe("a tube of another batch", () => {
+    // The screen is on batch 2; S0066 and S0067 are in batch 1.
+    const fromBatch2 = (label: string, overrides: Partial<ScanInput> = {}) =>
+      scan(label, { batchNumber: 2, currentSample: null, ...overrides });
+
+    it("is the wrong tube while a source tube of this batch is out", () => {
+      const d = fromBatch2("S0067-1", { mayMove: false });
+      expect(d).toMatchObject({ kind: "reject", reason: "other_batch" });
+      expect(d.kind === "reject" && d.message).toContain(
+        "belongs to batch 1; this screen is on batch 2",
+      );
+    });
+
+    it("moves the station to its batch when nothing is out", () => {
+      expect(fromBatch2("S0067-1", { mayMove: true })).toMatchObject({
+        kind: "place",
+        tube: 1,
+        sample: { newId: "S0067" },
+        moveTo: 1,
+      });
+    });
+
+    it("does not move where someone else is the Aliquoter", () => {
+      const d = fromBatch2("S0067-1", { mayMove: true, heldBy: "Ray" });
+      expect(d).toMatchObject({ kind: "reject", reason: "batch_held" });
+      expect(d.kind === "reject" && d.message).toContain(
+        "batch 1, where Ray is the Aliquoter",
+      );
+    });
+
+    it("shows where an already placed tube went, without moving", () => {
+      const done = { ...other, tubes: [placed(), ...other.tubes.slice(1)] };
+      expect(
+        fromBatch2("S0067-1", { mayMove: true, labelSample: done }),
+      ).toEqual({ kind: "repeat", sample: done, tube: 1 });
+    });
+
+    it("never moves a Labeler", () => {
+      const parsed = parseLabel("S0067-1");
+      expect(
+        decideLabelScan({
+          label: "S0067-1",
+          parsed,
+          labelSample: other,
+          currentSample: null,
+          batchNumber: 2,
+          destCount: 3,
+          mayMove: true,
+        }),
+      ).toMatchObject({ kind: "reject", reason: "other_batch" });
+    });
+  });
 });
 
 describe("placing tubes", () => {

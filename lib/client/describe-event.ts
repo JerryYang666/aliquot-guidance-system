@@ -19,6 +19,8 @@ export function describeEvent(e: LogEvent): string {
       return `joined as ${ROLE_LABELS[e.actorRole as Role] ?? e.actorRole} on batch ${e.batchNumber}`;
     case "participant_left":
       return "left";
+    case "participant_moved":
+      return `moved from batch ${e.batchNumber} to batch ${String(d.to)} by scanning ${str(d.label)}`;
     case "sample_pulled":
       return d.impliedByScan
         ? `pulled ${id} (recorded by scan)`

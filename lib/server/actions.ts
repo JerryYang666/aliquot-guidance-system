@@ -1,11 +1,18 @@
 import "server-only";
 
-import { and, eq, max, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, max, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { ActionResponse, ChangeMessage } from "@/lib/api-types";
 import type { Db, Tx } from "@/lib/db";
-import { batches, events, jobs, samples, type JobRow } from "@/lib/db/schema";
+import {
+  batches,
+  events,
+  jobs,
+  participants,
+  samples,
+  type JobRow,
+} from "@/lib/db/schema";
 import {
   applyLabelScan,
   applyPlacement,
@@ -24,8 +31,9 @@ import { parseLabel } from "@/lib/pipeline/labels";
 import type { EventDraft, LogEvent, Sample } from "@/lib/pipeline/types";
 
 import { HttpError } from "./errors";
+import { isOnline } from "./jobs";
 import { sampleUpdate, toLogEvent, toSample } from "./rows";
-import type { Participant } from "./tokens";
+import { signParticipantToken, type Participant } from "./tokens";
 
 const id = z.string().uuid();
 
@@ -172,7 +180,7 @@ export async function performAction(
     const job = await lockJob(tx, participant.jobId);
 
     const [previous] = await tx
-      .select({ version: events.version })
+      .select({ type: events.type, data: events.data })
       .from(events)
       .where(
         and(
@@ -188,6 +196,10 @@ export async function performAction(
         samples: [],
         events: [],
         duplicate: true,
+        // A retried scan that moved the station must still move it.
+        ...(previous.type === "participant_moved"
+          ? { moved: await sessionOn(participant, Number(previous.data.to)) }
+          : {}),
       };
     }
 
@@ -264,7 +276,11 @@ interface ScanContext {
   meta: { clientActionId: string; clientAt: string | null };
 }
 
-/** Looks up the sample a scanned label names and the station's current sample. */
+/**
+ * Looks up the sample a scanned label names and the station's current
+ * sample, and for an Aliquoter's tube of another batch, whether the
+ * station may move there (see decideScan).
+ */
 async function loadScanInput(
   tx: Tx,
   job: JobRow,
@@ -285,13 +301,61 @@ async function loadScanInput(
   const currentSample = currentSampleId
     ? await loadSample(tx, job.id, currentSampleId)
     : null;
-  return {
+  const input: ScanInput = {
     label,
     parsed,
     labelSample,
     currentSample,
     batchNumber: participant.batchNumber,
     destCount: job.destSets.length,
+  };
+  if (
+    participant.role === "aliquoter" &&
+    labelSample &&
+    labelSample.batchNumber !== participant.batchNumber
+  ) {
+    // A source tube out on this batch is on the Aliquoter's screen.
+    const [out] = await tx
+      .select({ id: samples.id })
+      .from(samples)
+      .where(
+        and(
+          eq(samples.jobId, job.id),
+          eq(samples.batchNumber, participant.batchNumber),
+          isNotNull(samples.pulledAt),
+          isNull(samples.finishedAt),
+        ),
+      )
+      .limit(1);
+    input.mayMove = !out;
+    const [holder] = await tx
+      .select({ name: participants.name })
+      .from(participants)
+      .where(
+        and(
+          eq(participants.jobId, job.id),
+          eq(participants.role, "aliquoter"),
+          eq(participants.batchNumber, labelSample.batchNumber),
+          ne(participants.id, participant.participantId),
+          isOnline,
+        ),
+      )
+      .orderBy(asc(participants.queuedAt))
+      .limit(1);
+    input.heldBy = holder?.name ?? null;
+  }
+  return input;
+}
+
+/** A station's session on a batch: what its screen carries on with after a move. */
+async function sessionOn(
+  participant: Participant,
+  batchNumber: number,
+): Promise<NonNullable<ActionResponse["moved"]>> {
+  const { participantId, name, role } = participant;
+  return {
+    token: await signParticipantToken({ ...participant, batchNumber }),
+    me: { participantId, name, role, batchNumber },
   };
 }
 
@@ -356,6 +420,22 @@ async function scan(
     };
   }
 
+  // A tube of another batch takes the station there first. Like joining
+  // that batch, it takes its place in line for the role from now.
+  const moveTo = decision.moveTo;
+  const moved: EventDraft[] = [];
+  if (moveTo !== undefined) {
+    await tx
+      .update(participants)
+      .set({ batchNumber: moveTo, queuedAt: sql`clock_timestamp()` })
+      .where(eq(participants.id, participant.participantId));
+    moved.push({
+      type: "participant_moved",
+      batchNumber: participant.batchNumber,
+      data: { to: moveTo, label: tubeLabel },
+    });
+  }
+
   const placed = applyPlacement(decision.sample, decision.tube, {
     now,
     actor: participant.name,
@@ -366,7 +446,7 @@ async function scan(
     tx,
     job,
     actor,
-    placed.events,
+    [...moved, ...placed.events],
     [placed.sample],
     meta,
   );
@@ -381,6 +461,9 @@ async function scan(
       destination,
       sampleFinished: placed.sample.finishedAt !== null,
     },
+    ...(moveTo !== undefined
+      ? { moved: await sessionOn(participant, moveTo) }
+      : {}),
   };
 }
 
