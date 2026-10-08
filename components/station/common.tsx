@@ -23,6 +23,7 @@ import {
   isProblem,
 } from "@/lib/client/describe-event";
 import type { Connection } from "@/lib/client/use-job-sync";
+import { useScrollingDown } from "@/lib/client/use-scrolling-down";
 import type { WakeLockState } from "@/lib/client/use-wake-lock";
 import { formatJobCode } from "@/lib/job-code";
 import {
@@ -86,6 +87,9 @@ function WakePill({ state }: { state: WakeLockState }) {
   );
 }
 
+// About the header's own height: nearer the top than this, it always shows.
+const HEADER_CLEARANCE_PX = 96;
+
 function JoinQrButton({
   onClick,
   className,
@@ -136,6 +140,11 @@ export function StationHeader({
 
   const RoleIcon = ROLE_ICONS[me.role];
   const station = `Batch ${batch.number} · Box ${batch.boxNumber}`;
+  // A phone has little height to spare, so there the bar slides away while
+  // the page is scrolled down and returns on the first scroll back up. It
+  // stays while one of its own menus is open.
+  const scrollingDown = useScrollingDown(HEADER_CLEARANCE_PX);
+  const tuckedAway = scrollingDown && !menuOpen && !peopleOpen;
   const showQr = (open: boolean) => {
     setQrOpen(open);
     onDialogChange(open);
@@ -147,7 +156,12 @@ export function StationHeader({
   // second line, with the QR button at its end.
   return (
     <>
-      <header className="sticky top-0 z-30 bg-slate-900 text-white">
+      <header
+        className={cx(
+          "sticky top-0 z-30 bg-slate-900 text-white transition-transform duration-200 motion-reduce:transition-none",
+          tuckedAway && "max-md:-translate-y-full",
+        )}
+      >
         <div className="mx-auto grid max-w-7xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-2">
           <span className="flex size-9 items-center justify-center rounded-lg bg-white text-slate-900 lg:row-span-2 lg:size-12 lg:rounded-xl">
             <RoleIcon className="size-5 lg:size-7" />

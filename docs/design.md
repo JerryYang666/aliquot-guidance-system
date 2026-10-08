@@ -199,6 +199,10 @@ Logged event types: `job_created`, `participant_joined`, `participant_left`,
 
 - **Screen stays on**: Screen Wake Lock API on every operator screen,
   re-acquired when the tab becomes visible again.
+- **Top bar**: every station's header leads with its role, batch and box in
+  large type. On a phone it slides away while the page is scrolled down and
+  returns on the first scroll back up, so the camera and the tube keep the
+  screen.
 - **Scanning**: rear camera at up to 1080p, a center crop decoded several
   times a second with `zxing-wasm` (ZXing-C++ in WebAssembly, Data Matrix
   only). The `.wasm` file is self-hosted. iOS Safari has no native
