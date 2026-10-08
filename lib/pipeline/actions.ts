@@ -32,7 +32,7 @@ export interface LabelScanAction {
 export interface ScanAction {
   type: "scan";
   label: string;
-  /** The sample the aliquoter's screen shows as current, or null when waiting. */
+  /** The source tube the aliquoter's screen shows, or null when none is out. */
   currentSampleId: string | null;
 }
 
@@ -327,7 +327,7 @@ export interface ScanInput {
   parsed: ParsedLabel | null;
   /** The sample whose new ID the label carries, or null when the job has none. */
   labelSample: Sample | null;
-  /** The aliquoter's current sample, or null when waiting. */
+  /** The sample on the station's screen (the Aliquoter's: the source tube out), or null. */
   currentSample: Sample | null;
   batchNumber: number;
   destCount: number;
@@ -404,7 +404,12 @@ function decideOtherBatch(
   return { kind: "place", sample, tube, moveTo: sample.batchNumber };
 }
 
-/** The aliquoter's scan rules from docs/design.md ("What a scan does"). */
+/**
+ * The aliquoter's scan rules from docs/design.md ("What a scan does").
+ * Within the batch, a tube is checked only against the source tube on the
+ * screen: with one out, the label must be that sample's; with none, any
+ * tube goes, in any order.
+ */
 export function decideScan(input: ScanInput): ScanDecision {
   const check = checkLabel(input);
   if (check.kind === "reject") return check;
@@ -493,7 +498,23 @@ export function labelScanRepeatEvent(sample: Sample, tube: number): EventDraft {
   );
 }
 
-/** Places a tube; marks pull and label as implied if nobody pressed them, and finishes the sample on its last tube. */
+/**
+ * The tubes a scan of `tube` places: that one, then the sample's other
+ * pending tubes. They all go in the same slot, each in its own set's box,
+ * so one scan shows where every one of them goes.
+ */
+export function tubesPlacedBy(sample: Sample, tube: number): number[] {
+  const others = sample.tubes
+    .map((t, i) => (i + 1 !== tube && t.status === "pending" ? i + 1 : null))
+    .filter((n) => n !== null);
+  return [tube, ...others];
+}
+
+/**
+ * Places a scanned tube and, with it, the sample's other pending tubes (see
+ * tubesPlacedBy), which finishes the sample. Marks pull and label as
+ * implied if nobody pressed them.
+ */
 export function applyPlacement(
   sample: Sample,
   tube: number,
@@ -512,28 +533,32 @@ export function applyPlacement(
     s.labeledBy = actor;
     events.push(sampleEvent(s, "sample_labeled", { impliedByScan: true }));
   }
-  const previousStatus = s.tubes[tube - 1]?.status ?? "pending";
-  s.tubes[tube - 1] = {
-    ...s.tubes[tube - 1],
-    status: "placed",
-    at: now,
-    by: actor,
-  } satisfies TubeState;
-  const dest = destinationFor(ctx.destSets, ctx.boxNumber, s.slot, tube);
-  events.push(
-    sampleEvent(
-      s,
-      "tube_placed",
-      {
-        label: labelFor(s.newId, tube),
-        set: dest.set,
-        box: dest.box,
-        slot: dest.slot,
-        ...(previousStatus === "not_filled" ? { wasNotFilled: true } : {}),
-      },
-      tube,
-    ),
-  );
+  const scanned = labelFor(s.newId, tube);
+  for (const n of tubesPlacedBy(s, tube)) {
+    const previousStatus = s.tubes[n - 1]?.status ?? "pending";
+    s.tubes[n - 1] = {
+      ...s.tubes[n - 1],
+      status: "placed",
+      at: now,
+      by: actor,
+    } satisfies TubeState;
+    const dest = destinationFor(ctx.destSets, ctx.boxNumber, s.slot, n);
+    events.push(
+      sampleEvent(
+        s,
+        "tube_placed",
+        {
+          label: labelFor(s.newId, n),
+          set: dest.set,
+          box: dest.box,
+          slot: dest.slot,
+          ...(n !== tube ? { withLabel: scanned } : {}),
+          ...(previousStatus === "not_filled" ? { wasNotFilled: true } : {}),
+        },
+        n,
+      ),
+    );
+  }
   if (!s.finishedAt && s.tubes.every((t) => t.status !== "pending")) {
     s.finishedAt = now;
     s.finishedBy = actor;

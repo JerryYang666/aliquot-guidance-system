@@ -54,9 +54,9 @@ export const INSTRUCTIONS: Record<Language, Instructions> = {
         steps: [
           "Take the source tube from the Puller. Check that the ID on it matches the big number on your screen, and that the labels on the three new tubes match the “New ID” below it.",
           "Aliquot it into its three labeled tubes.",
-          "Tap “Start camera”, then scan each of the three tubes. After each scan, the screen shows which box and slot that tube goes in.",
-          "After the third scan, the screen moves to the next tube. Hand the source tube back to the Puller.",
-          "Working alone, with no Puller or Labeler? Pull the tube and stick on its labels yourself, then scan as above. The first scan starts the sample and counts it as pulled and labeled.",
+          "Tap “Start camera”, then scan one of the three tubes. All three go in the same slot, each in its own box: the screen shows the slot and the boxes. Scanning the others is not needed.",
+          "Put the tubes away, and hand the source tube back to the Puller. The screen has already moved to the next tube.",
+          "Working alone, with no Puller or Labeler? Pull the tube and stick on its labels yourself, then scan one of its tubes as above. Go in any order: the scan counts the sample as pulled and labeled.",
         ],
       },
       overview: {
@@ -99,9 +99,9 @@ export const INSTRUCTIONS: Record<Language, Instructions> = {
         steps: [
           "从取管员（Puller）手里接过样本管，核对管上的编号和屏幕上的大号数字是否一致，并核对三支新管的标签和下方的 “New ID” 是否一致。",
           "把样本分装到对应的三支已贴标签的管里。",
-          "点 “Start camera”，逐支扫描这三支管。每扫一支，屏幕会显示它该放进哪个盒子的哪个位置。",
-          "扫完第三支，屏幕会跳到下一管。把样本管还给取管员。",
-          "如果只有你一个人，没有取管员（Puller）和贴标员（Labeler）：自己取出样本管、贴好标签，然后照上面的步骤扫描。扫第一支管就会开始这个样本，并记为已取管、已贴标。",
+          "点 “Start camera”，扫描三支管中的任意一支。三支管放在同一个位置，各放进自己的盒子：屏幕会显示这个位置和三个盒子。另外两支不用再扫。",
+          "把管子放好，再把样本管还给取管员。屏幕已经跳到下一管。",
+          "如果只有你一个人，没有取管员（Puller）和贴标员（Labeler）：自己取出样本管、贴好标签，然后照上面的步骤扫描其中一支。顺序不限：扫描会把这个样本记为已取管、已贴标。",
         ],
       },
       overview: {

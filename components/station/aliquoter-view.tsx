@@ -12,7 +12,7 @@ import { useCallback, useState } from "react";
 import { ScannerPanel } from "@/components/scanner/scanner-panel";
 import { signal } from "@/lib/client/feedback";
 import { randomId } from "@/lib/client/ids";
-import { decideScan } from "@/lib/pipeline/actions";
+import { decideScan, tubesPlacedBy } from "@/lib/pipeline/actions";
 import { destinationFor } from "@/lib/pipeline/destination";
 import { labelFor, parseLabel } from "@/lib/pipeline/labels";
 import {
@@ -36,8 +36,8 @@ type ScanView =
       id: string;
       kind: "place" | "repeat";
       label: string;
-      tube: number;
-      set: string;
+      /** The tubes the scan placed, the scanned one first; for a repeat, the scanned one. */
+      tubes: number[];
       box: number;
       slot: string;
       newId: string;
@@ -107,32 +107,23 @@ export function AliquoterView({
           });
           signal("error");
         } else {
-          const d = destinationFor(
-            destSets,
-            boxNumber,
-            decision.sample.slot,
-            decision.tube,
-          );
-          const sampleDone =
-            decision.kind === "place" &&
-            decision.sample.tubes.every(
-              (t, i) => i === decision.tube - 1 || t.status !== "pending",
-            );
+          // A placement takes the sample's other pending tubes with it, so
+          // it always leaves the sample finished.
+          const place = decision.kind === "place";
           setResult({
             id,
             kind: decision.kind,
             label: labelFor(decision.sample.newId, decision.tube),
-            tube: decision.tube,
-            set: d.set,
-            box: d.box,
-            slot: d.slot,
+            tubes: place
+              ? tubesPlacedBy(decision.sample, decision.tube)
+              : [decision.tube],
+            box: boxNumber,
+            slot: decision.sample.slot,
             newId: decision.sample.newId,
-            sampleDone,
+            sampleDone: place,
             pending: true,
           });
-          signal(
-            decision.kind === "repeat" ? "repeat" : sampleDone ? "done" : "ok",
-          );
+          signal(place ? "done" : "repeat");
         }
       } else {
         setResult({ id, kind: "checking", label });
@@ -158,8 +149,7 @@ export function AliquoterView({
           id,
           kind: outcome.kind,
           label: outcome.label,
-          tube: outcome.destination.tube,
-          set: outcome.destination.set,
+          tubes: outcome.tubes,
           box: outcome.destination.box,
           slot: outcome.destination.slot,
           newId: outcome.label.replace(/-\d+$/, ""),
@@ -175,10 +165,6 @@ export function AliquoterView({
                 : "ok",
           );
         }
-        // A scan while waiting starts that sample: stay on it until it is done.
-        const placed = sent.response.samples[0];
-        if (outcome.kind === "place" && placed && !outcome.sampleFinished)
-          setSelectedId(placed.id);
       }
       setResult((r) => (r?.id === id ? next : r));
     },
@@ -227,9 +213,13 @@ export function AliquoterView({
     <div className="mx-auto grid max-w-7xl gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-[420px_1fr]">
       <ScannerPanel
         onLabel={(label) => void handleScan(label)}
-        idleText="Hold each new tube's label in the frame. The camera stays on."
+        idleText="Hold one new tube's label in the frame: one scan places all three. The camera stays on."
       >
-        <ScanResult result={result} layout={snapshot.layouts.dest} />
+        <ScanResult
+          result={result}
+          destSets={destSets}
+          layout={snapshot.layouts.dest}
+        />
       </ScannerPanel>
 
       <div className="flex flex-col gap-3">
@@ -257,7 +247,7 @@ export function AliquoterView({
             </div>
             <p className="text-slate-600">
               This source tube is out of the freezer, but its new tubes are not
-              labeled yet. Scanning one of them starts the sample.
+              labeled yet. Scanning one of them places them all.
             </p>
           </Card>
         ) : (
@@ -274,7 +264,7 @@ export function AliquoterView({
                 </span>{" "}
                 — {waitingFor.pulledAt ? "pulled ✓" : "not pulled yet"},{" "}
                 {waitingFor.labeledAt ? "labeled ✓" : "not labeled yet"}.
-                Scanning one of its tubes starts it.
+                Scanning one of its tubes places them all.
               </p>
             ) : (
               <p className="mt-1 text-emerald-700">
@@ -351,7 +341,7 @@ export function AliquoterView({
           }
         >
           <p className="text-slate-700">
-            Tubes not scanned will be recorded as <strong>not filled</strong>:{" "}
+            Tubes not placed will be recorded as <strong>not filled</strong>:{" "}
             {current.tubes
               .map((t, i) =>
                 t.status === "pending" ? labelFor(current.newId, i + 1) : null,
@@ -534,9 +524,11 @@ function CurrentSample({
 
 function ScanResult({
   result,
+  destSets,
   layout,
 }: {
   result: ScanView | null;
+  destSets: string[];
   layout: ViewProps["snapshot"]["layouts"]["dest"];
 }) {
   if (!result) {
@@ -564,24 +556,53 @@ function ScanResult({
       </div>
     );
   }
-  const color = setColor(result.tube);
+  const dests = result.tubes.map((n) =>
+    destinationFor(destSets, result.box, result.slot, n),
+  );
+  const color = setColor(result.tubes[0] ?? 0);
   const repeat = result.kind === "repeat";
+  // One scan placed several tubes: they share the slot, each in its own set's box.
+  const several = dests.length > 1;
   return (
     <div
       role="status"
       className={cx(
         "rounded-2xl p-5",
-        repeat ? cx(color.soft, color.text) : color.solid,
+        repeat
+          ? cx(color.soft, color.text)
+          : several
+            ? "bg-slate-800 text-white"
+            : color.solid,
       )}
     >
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="text-sm font-semibold uppercase opacity-90">
-            {repeat ? "Already placed" : "Place in"}
+            {repeat
+              ? "Already placed"
+              : several
+                ? `${dests.length} tubes go in`
+                : "Place in"}
           </div>
-          <div className="text-4xl leading-tight font-black uppercase">
-            {result.set}
-          </div>
+          {several ? (
+            <div className="my-1 flex flex-wrap gap-1.5">
+              {dests.map((d) => (
+                <span
+                  key={d.tube}
+                  className={cx(
+                    "rounded-lg px-2 py-0.5 text-2xl font-black uppercase",
+                    setColor(d.tube).solid,
+                  )}
+                >
+                  {d.set}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div className="text-4xl leading-tight font-black uppercase">
+              {dests[0]?.set}
+            </div>
+          )}
           <div className="text-2xl font-bold">Box {result.box}</div>
           <div className="font-mono text-7xl leading-none font-black">
             {result.slot}
@@ -591,9 +612,9 @@ function ScanResult({
           <BoxGrid
             layout={layout}
             highlight={result.slot}
-            highlightClass={color.solid}
+            highlightClass={several ? undefined : color.solid}
             size="sm"
-            label={`${result.set} box ${result.box}, ${result.slot}`}
+            label={`${dests.map((d) => d.set).join(", ")} box ${result.box}, ${result.slot}`}
           />
         </div>
       </div>

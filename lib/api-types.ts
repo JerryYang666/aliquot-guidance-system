@@ -82,6 +82,8 @@ export type ScanOutcome =
       kind: "place" | "repeat";
       label: string;
       destination: Destination;
+      /** The tubes this scan placed, the scanned one first; for a repeat, the scanned one. */
+      tubes: number[];
       sampleFinished: boolean;
     }
   | { kind: "reject"; reason: string; message: string };

@@ -42,8 +42,10 @@ export function describeEvent(e: LogEvent): string {
       return `label scan rejected: ${str(d.message)}`;
     case "sample_skipped":
       return `skipped ${id} for now`;
-    case "tube_placed":
-      return `placed ${tube} → ${str(d.set)} box ${String(d.box)} · ${str(d.slot)}`;
+    case "tube_placed": {
+      const placed = `placed ${tube} → ${str(d.set)} box ${String(d.box)} · ${str(d.slot)}`;
+      return d.withLabel ? `${placed} (with ${str(d.withLabel)})` : placed;
+    }
     case "tube_undone":
       return `undid ${tube}`;
     case "scan_repeated":

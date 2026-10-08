@@ -23,6 +23,7 @@ import {
   MAX_NOTE_LENGTH,
   scanRejectEvent,
   scanRepeatEvent,
+  tubesPlacedBy,
   type Action,
   type ScanInput,
 } from "@/lib/pipeline/actions";
@@ -359,7 +360,7 @@ async function sessionOn(
   };
 }
 
-/** The aliquoter's scan: places a tube, repeats a placed one, or rejects. */
+/** The aliquoter's scan: places a tube (and its sample's other pending ones), repeats a placed one, or rejects. */
 async function scan(
   { tx, job, participant, now, actor, meta }: ScanContext,
   input: ScanInput,
@@ -415,6 +416,7 @@ async function scan(
         kind: "repeat",
         label: tubeLabel,
         destination,
+        tubes: [decision.tube],
         sampleFinished: decision.sample.finishedAt !== null,
       },
     };
@@ -459,6 +461,7 @@ async function scan(
       kind: "place",
       label: tubeLabel,
       destination,
+      tubes: tubesPlacedBy(decision.sample, decision.tube),
       sampleFinished: placed.sample.finishedAt !== null,
     },
     ...(moveTo !== undefined
