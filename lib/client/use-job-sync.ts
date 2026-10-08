@@ -4,6 +4,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 import type {
   ActionResponse,
+  AdminJobStateResponse,
   ChangeMessage,
   OnlineParticipant,
   StateResponse,
@@ -12,7 +13,13 @@ import type {
 
 import { api, ApiFailure } from "./api";
 import type { Session } from "./session";
-import { initialSyncState, syncReducer } from "./sync-state";
+import {
+  initialSyncState,
+  syncReducer,
+  type Snapshot,
+  type SyncAction,
+  type SyncState,
+} from "./sync-state";
 
 /** live = relay connected; polling = relay unavailable, checking every few seconds. */
 export type Connection = "connecting" | "live" | "polling";
@@ -25,17 +32,38 @@ function backoff(attempt: number): number {
   return Math.min(1_000 * 2 ** attempt, 30_000) * (0.75 + Math.random() * 0.5);
 }
 
+// Where each kind of viewer reads a job from. Both roots serve `state`,
+// `version` and `realtime-ticket`; they differ in who may call them and in
+// how the viewer asks who is online.
+const SOURCES = {
+  // A station's heartbeat also keeps it on the online list.
+  station: { root: "/api/jobs", presence: "heartbeat", method: "POST" },
+  // An admin watches without joining, so only reads the list.
+  admin: { root: "/api/admin/jobs", presence: "online", method: "GET" },
+} as const;
+
 /**
- * Keeps one station's view of its batch identical to the server's: an
- * initial snapshot, then changes pushed by the relay (or found by polling),
- * applied in version order. See lib/client/sync-state.ts.
+ * Keeps a screen's view of a job identical to the server's: an initial
+ * snapshot, then changes pushed by the relay (or found by polling), applied
+ * in version order. See lib/client/sync-state.ts.
  */
-export function useJobSync(code: string, session: Session | null) {
-  const [state, dispatch] = useReducer(syncReducer, initialSyncState);
+function useSync<S extends Snapshot & { online: OnlineParticipant[] }>(
+  viewer: keyof typeof SOURCES,
+  code: string,
+  token: string | undefined,
+) {
+  const [state, dispatch] = useReducer<SyncState<S>, [SyncAction<S>]>(
+    syncReducer,
+    initialSyncState,
+  );
   const [connection, setConnection] = useState<Connection>("connecting");
   const [online, setOnline] = useState<OnlineParticipant[]>([]);
   const [fatal, setFatal] = useState<ApiFailure | null>(null);
-  const token = session?.token ?? null;
+  const source = SOURCES[viewer];
+  const base = `${source.root}/${code}`;
+  // A station has nothing to sync until it has joined; an admin's browser
+  // already carries its session cookie.
+  const ready = viewer === "admin" || token !== undefined;
 
   const versionRef = useRef(0);
   useEffect(() => {
@@ -56,7 +84,7 @@ export function useJobSync(code: string, session: Session | null) {
 
   /** Fetches a snapshot; calls made while one is running cause exactly one more. */
   const refresh = useCallback((): Promise<void> => {
-    if (!token) return Promise.resolve();
+    if (!ready) return Promise.resolve();
     if (inFlight.current) {
       again.current = true;
       return inFlight.current;
@@ -65,9 +93,7 @@ export function useJobSync(code: string, session: Session | null) {
       do {
         again.current = false;
         try {
-          const snapshot = await api<StateResponse>(`/api/jobs/${code}/state`, {
-            token,
-          });
+          const snapshot = await api<S>(`${base}/state`, { token });
           dispatch({ type: "snapshot", snapshot });
           setOnline(snapshot.online);
         } catch (error) {
@@ -78,7 +104,7 @@ export function useJobSync(code: string, session: Session | null) {
     };
     inFlight.current = run();
     return inFlight.current;
-  }, [code, token, fail]);
+  }, [base, token, ready, fail]);
 
   const applyResponse = useCallback((response: ActionResponse) => {
     if (response.duplicate) return;
@@ -94,36 +120,32 @@ export function useJobSync(code: string, session: Session | null) {
   }, []);
 
   const refreshOnline = useCallback(async () => {
-    if (!token) return;
+    if (!ready) return;
     try {
       const r = await api<{ online: OnlineParticipant[] }>(
-        `/api/jobs/${code}/heartbeat`,
-        {
-          method: "POST",
-          token,
-          retry: false,
-        },
+        `${base}/${source.presence}`,
+        { method: source.method, token, retry: false },
       );
       setOnline(r.online);
     } catch (error) {
       fail(error);
     }
-  }, [code, token, fail]);
+  }, [base, source, token, ready, fail]);
 
   // Initial load, and again whenever the tab comes back (phones sleep).
   useEffect(() => {
-    if (!token) return;
+    if (!ready) return;
     void refresh();
     const onVisible = () => {
       if (document.visibilityState === "visible") void refresh();
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [token, refresh]);
+  }, [ready, refresh]);
 
   // The relay socket, reconnecting with backoff.
   useEffect(() => {
-    if (!token) return;
+    if (!ready) return;
     let stopped = false;
     let socket: WebSocket | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -138,14 +160,11 @@ export function useJobSync(code: string, session: Session | null) {
     const connect = async () => {
       let ticket: TicketResponse;
       try {
-        ticket = await api<TicketResponse>(
-          `/api/jobs/${code}/realtime-ticket`,
-          {
-            method: "POST",
-            token,
-            retry: false,
-          },
-        );
+        ticket = await api<TicketResponse>(`${base}/realtime-ticket`, {
+          method: "POST",
+          token,
+          retry: false,
+        });
       } catch (error) {
         fail(error);
         return retry();
@@ -199,28 +218,25 @@ export function useJobSync(code: string, session: Session | null) {
       document.removeEventListener("visibilitychange", onVisible);
       socket?.close();
     };
-  }, [code, token, refresh, refreshOnline, fail]);
+  }, [base, token, ready, refresh, refreshOnline, fail]);
 
   // Without the relay, look for new versions every few seconds.
   useEffect(() => {
-    if (!token || connection === "live") return;
+    if (!ready || connection === "live") return;
     const id = setInterval(async () => {
       if (document.visibilityState !== "visible") return;
       try {
-        const { version } = await api<{ version: number }>(
-          `/api/jobs/${code}/version`,
-          {
-            token,
-            retry: false,
-          },
-        );
+        const { version } = await api<{ version: number }>(`${base}/version`, {
+          token,
+          retry: false,
+        });
         if (version > versionRef.current) void refresh();
       } catch (error) {
         fail(error);
       }
     }, POLL_MS);
     return () => clearInterval(id);
-  }, [code, token, connection, refresh, fail]);
+  }, [base, token, ready, connection, refresh, fail]);
 
   // A change that waits for a missing one too long means a message was lost.
   const hasGap = state.pending.length > 0;
@@ -230,12 +246,12 @@ export function useJobSync(code: string, session: Session | null) {
     return () => clearTimeout(id);
   }, [hasGap, refresh]);
 
-  // Stay on the online list.
+  // Stay on the online list, and see who has dropped off it.
   useEffect(() => {
-    if (!token) return;
+    if (!ready) return;
     const id = setInterval(() => void refreshOnline(), HEARTBEAT_MS);
     return () => clearInterval(id);
-  }, [token, refreshOnline]);
+  }, [ready, refreshOnline]);
 
   return {
     snapshot: state.snapshot,
@@ -248,6 +264,16 @@ export function useJobSync(code: string, session: Session | null) {
     refresh,
     applyResponse,
   };
+}
+
+/** One station's view of its batch. */
+export function useJobSync(code: string, session: Session | null) {
+  return useSync<StateResponse>("station", code, session?.token);
+}
+
+/** An admin's view of a whole job, read without joining it. */
+export function useAdminJobSync(code: string) {
+  return useSync<AdminJobStateResponse>("admin", code, undefined);
 }
 
 export type JobSync = ReturnType<typeof useJobSync>;

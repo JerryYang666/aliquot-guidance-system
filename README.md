@@ -79,11 +79,11 @@ TEST_DATABASE_URL=postgres://localhost/ags_test npm test
 | --------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `app/`                | Pages (home, create, join, station, log, admin) and API routes under `app/api/`                              |
 | `components/station/` | The four role screens and the station shell                                                                  |
-| `components/admin/`   | Admin sign-in, the invite page, and the list of jobs and admins                                              |
+| `components/admin/`   | Admin sign-in, the invite page, the list of jobs and admins, and the live view of a job                      |
 | `components/scanner/` | Camera and keyboard-wedge scanning                                                                           |
 | `lib/pipeline/`       | Pure rules: queue order, actions, scan decisions, labels, box layouts                                        |
 | `lib/server/`         | Server side: tokens, the actions transaction, exports, relay publishing                                      |
-| `lib/server/admin/`   | Admin passkeys, invite links and sessions                                                                    |
+| `lib/server/admin/`   | Admin passkeys, invite links and sessions; what admins read about jobs                                       |
 | `lib/client/`         | Browser side: API calls, sync in version order, wake lock, feedback                                          |
 | `lib/workbook/`       | Reading and validating aliquot workbooks                                                                     |
 | `migrations/`         | SQL schema, applied by hand in order                                                                         |

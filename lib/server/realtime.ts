@@ -15,13 +15,14 @@ const PUBLISH_AUDIENCE = "ags-relay-publish";
  */
 export async function mintRelayTicket(
   jobId: string,
-  participantId: string,
+  /** Who is connecting: a participant's ID, or "admin:<passkey ID>". */
+  subject: string,
 ): Promise<{ url: string; ticket: string } | null> {
   const relay = relayConfig();
   if (!relay) return null;
   const ticket = await new SignJWT({ job: jobId })
     .setProtectedHeader({ alg: "HS256" })
-    .setSubject(participantId)
+    .setSubject(subject)
     .setAudience(TICKET_AUDIENCE)
     .setIssuedAt()
     .setExpirationTime("60s")

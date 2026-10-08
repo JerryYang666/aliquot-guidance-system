@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, LogOut, UserPlus } from "lucide-react";
+import { Copy, Eye, LogOut, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -68,12 +68,20 @@ function JobRow({ job, now }: { job: AdminJob; now: number }) {
             ` · last activity ${ago(job.lastActivityAt, now)}`}
         </div>
       </div>
-      <Link
-        href={`/j/${job.code}`}
-        className="inline-flex h-8 items-center justify-center rounded-lg bg-white px-3 text-sm font-medium ring-1 ring-slate-300 hover:bg-slate-50"
-      >
-        Join
-      </Link>
+      <div className="flex gap-2">
+        <Link
+          href={`/admin/jobs/${job.code}`}
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800"
+        >
+          <Eye className="size-4" /> Watch
+        </Link>
+        <Link
+          href={`/j/${job.code}`}
+          className="inline-flex h-8 items-center justify-center rounded-lg bg-white px-3 text-sm font-medium ring-1 ring-slate-300 hover:bg-slate-50"
+        >
+          Join
+        </Link>
+      </div>
     </li>
   );
 }

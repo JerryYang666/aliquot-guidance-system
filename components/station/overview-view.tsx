@@ -2,11 +2,18 @@
 
 import { useState } from "react";
 
+import type { OnlineParticipant } from "@/lib/api-types";
 import { formatTime } from "@/lib/client/describe-event";
 import type { Action } from "@/lib/pipeline/actions";
 import { labelFor } from "@/lib/pipeline/labels";
+import type { BoxLayout } from "@/lib/pipeline/layout";
 import { batchProgress, hasPlacedTube } from "@/lib/pipeline/queue";
-import { ROLE_LABELS, type Sample } from "@/lib/pipeline/types";
+import {
+  ROLE_LABELS,
+  type Batch,
+  type LogEvent,
+  type Sample,
+} from "@/lib/pipeline/types";
 
 import { BoxGrid } from "../box-grid";
 import { Modal } from "../modal";
@@ -51,6 +58,9 @@ const TUBE_DOT: Record<string, string> = {
   not_filled: "bg-red-500",
 };
 
+/** How mistakes are fixed from the overview. */
+type Corrections = Pick<ViewProps, "perform" | "busy">;
+
 export function OverviewView({
   snapshot,
   samples,
@@ -60,13 +70,52 @@ export function OverviewView({
   busy,
   setDialogOpen,
 }: ViewProps) {
+  return (
+    <BatchOverview
+      destSets={snapshot.job.destSets}
+      batch={snapshot.batch}
+      layout={snapshot.layouts.dest}
+      samples={samples}
+      feed={feed}
+      online={online}
+      corrections={{ perform, busy }}
+      onDialogChange={setDialogOpen}
+    />
+  );
+}
+
+/**
+ * One batch at a glance: its destination box with each sample's stage, its
+ * progress, who is online and what just happened. The Overview role can fix
+ * mistakes from here; an admin watching a job sees the same, read-only.
+ */
+export function BatchOverview({
+  destSets,
+  batch,
+  layout,
+  samples,
+  feed,
+  online,
+  corrections,
+  onDialogChange,
+}: {
+  destSets: string[];
+  batch: Batch;
+  layout: BoxLayout;
+  samples: Sample[];
+  feed: LogEvent[];
+  online: OnlineParticipant[];
+  /** Absent for a viewer who only watches. */
+  corrections?: Corrections;
+  onDialogChange?: (open: boolean) => void;
+}) {
   const [selectedId, setSelectedIdState] = useState<string | null>(null);
   const bySlot = new Map(samples.map((s) => [s.slot, s]));
   const selected = samples.find((s) => s.id === selectedId) ?? null;
   const progress = batchProgress(samples);
   const select = (id: string | null) => {
     setSelectedIdState(id);
-    setDialogOpen(id !== null);
+    onDialogChange?.(id !== null);
   };
 
   return (
@@ -74,15 +123,16 @@ export function OverviewView({
       <Card className="flex flex-col gap-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <Label>
-            Batch {snapshot.batch.number} · {snapshot.job.destSets.join(" / ")}{" "}
-            box {snapshot.batch.boxNumber}
+            Batch {batch.number} · {destSets.join(" / ")} box {batch.boxNumber}
           </Label>
           <span className="text-sm text-slate-500">
-            Tap a slot for details and corrections
+            {corrections
+              ? "Tap a slot for details and corrections"
+              : "Tap a slot for details"}
           </span>
         </div>
         <BoxGrid
-          layout={snapshot.layouts.dest}
+          layout={layout}
           size="lg"
           label="Destination box layout with each sample's progress"
           cellClass={(key) => {
@@ -185,11 +235,7 @@ export function OverviewView({
         <Card>
           <Label>Activity</Label>
           <div className="mt-2 max-h-96 overflow-y-auto">
-            <Feed
-              events={feed}
-              batchNumber={snapshot.batch.number}
-              limit={60}
-            />
+            <Feed events={feed} batchNumber={batch.number} limit={60} />
           </div>
         </Card>
       </div>
@@ -197,10 +243,9 @@ export function OverviewView({
       {selected && (
         <SampleDetails
           sample={selected}
-          destSets={snapshot.job.destSets}
-          boxNumber={snapshot.batch.boxNumber}
-          busy={busy}
-          perform={perform}
+          destSets={destSets}
+          boxNumber={batch.boxNumber}
+          corrections={corrections}
           onClose={() => select(null)}
         />
       )}
@@ -212,19 +257,18 @@ function SampleDetails({
   sample: s,
   destSets,
   boxNumber,
-  busy,
-  perform,
+  corrections,
   onClose,
 }: {
   sample: Sample;
   destSets: string[];
   boxNumber: number;
-  busy: boolean;
-  perform: ViewProps["perform"];
+  corrections?: Corrections;
   onClose: () => void;
 }) {
   const [note, setNote] = useState("");
-  const act = (action: Action) => void perform(action);
+  const busy = corrections?.busy ?? false;
+  const act = (action: Action) => void corrections?.perform(action);
   const step = (label: string, at: string | null, by: string | null) => (
     <div className="flex justify-between gap-3 py-1">
       <span className="text-slate-600">{label}</span>
@@ -282,7 +326,7 @@ function SampleDetails({
                     ? "—"
                     : `${t.status === "placed" ? "placed" : "not filled"} ${t.at ? formatTime(t.at, true) : ""}`}
                 </span>
-                {t.status !== "pending" && !s.returnedAt && (
+                {corrections && t.status !== "pending" && !s.returnedAt && (
                   <button
                     type="button"
                     disabled={busy}
@@ -317,114 +361,118 @@ function SampleDetails({
           </div>
         )}
 
-        <div>
-          <Label>Corrections</Label>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {!s.pulledAt && !s.finishedAt && (
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() => act({ type: "pull", sampleId: s.id })}
-              >
-                Mark pulled
-              </Button>
-            )}
-            {s.pulledAt && !started && (
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() => act({ type: "undo_pull", sampleId: s.id })}
-              >
-                Undo pull
-              </Button>
-            )}
-            {!s.labeledAt && !s.finishedAt && (
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() => act({ type: "label", sampleId: s.id })}
-              >
-                Mark labeled
-              </Button>
-            )}
-            {s.labeledAt && !started && (
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() => act({ type: "undo_label", sampleId: s.id })}
-              >
-                Undo labels
-              </Button>
-            )}
-            {!s.finishedAt && (
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() => act({ type: "finish", sampleId: s.id })}
-              >
-                Finish (unscanned = not filled)
-              </Button>
-            )}
-            {s.finishedAt && !s.returnedAt && (
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() => act({ type: "reopen", sampleId: s.id })}
-              >
-                Reopen
-              </Button>
-            )}
-            {s.finishedAt && s.pulledAt && !s.returnedAt && (
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() => act({ type: "return", sampleId: s.id })}
-              >
-                Mark returned
-              </Button>
-            )}
-            {s.returnedAt && (
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() => act({ type: "undo_return", sampleId: s.id })}
-              >
-                Undo return
-              </Button>
-            )}
-            {!s.finishedAt && (
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() => act({ type: "skip", sampleId: s.id })}
-              >
-                Move to end of queue
-              </Button>
-            )}
-          </div>
-        </div>
+        {corrections && (
+          <>
+            <div>
+              <Label>Corrections</Label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {!s.pulledAt && !s.finishedAt && (
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => act({ type: "pull", sampleId: s.id })}
+                  >
+                    Mark pulled
+                  </Button>
+                )}
+                {s.pulledAt && !started && (
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => act({ type: "undo_pull", sampleId: s.id })}
+                  >
+                    Undo pull
+                  </Button>
+                )}
+                {!s.labeledAt && !s.finishedAt && (
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => act({ type: "label", sampleId: s.id })}
+                  >
+                    Mark labeled
+                  </Button>
+                )}
+                {s.labeledAt && !started && (
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => act({ type: "undo_label", sampleId: s.id })}
+                  >
+                    Undo labels
+                  </Button>
+                )}
+                {!s.finishedAt && (
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => act({ type: "finish", sampleId: s.id })}
+                  >
+                    Finish (unscanned = not filled)
+                  </Button>
+                )}
+                {s.finishedAt && !s.returnedAt && (
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => act({ type: "reopen", sampleId: s.id })}
+                  >
+                    Reopen
+                  </Button>
+                )}
+                {s.finishedAt && s.pulledAt && !s.returnedAt && (
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => act({ type: "return", sampleId: s.id })}
+                  >
+                    Mark returned
+                  </Button>
+                )}
+                {s.returnedAt && (
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => act({ type: "undo_return", sampleId: s.id })}
+                  >
+                    Undo return
+                  </Button>
+                )}
+                {!s.finishedAt && (
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => act({ type: "skip", sampleId: s.id })}
+                  >
+                    Move to end of queue
+                  </Button>
+                )}
+              </div>
+            </div>
 
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!note.trim()) return;
-            act({ type: "note", sampleId: s.id, text: note });
-            setNote("");
-          }}
-        >
-          <input
-            aria-label="Add a note"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            maxLength={500}
-            placeholder="Add a note"
-            className="h-9 flex-1 rounded-lg px-3 ring-1 ring-slate-300"
-          />
-          <Button size="sm" type="submit" disabled={busy || !note.trim()}>
-            Add
-          </Button>
-        </form>
+            <form
+              className="flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!note.trim()) return;
+                act({ type: "note", sampleId: s.id, text: note });
+                setNote("");
+              }}
+            >
+              <input
+                aria-label="Add a note"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                maxLength={500}
+                placeholder="Add a note"
+                className="h-9 flex-1 rounded-lg px-3 ring-1 ring-slate-300"
+              />
+              <Button size="sm" type="submit" disabled={busy || !note.trim()}>
+                Add
+              </Button>
+            </form>
+          </>
+        )}
       </div>
     </Modal>
   );

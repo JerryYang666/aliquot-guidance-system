@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { ChangeMessage, StateResponse } from "@/lib/api-types";
+import type {
+  AdminJobStateResponse,
+  ChangeMessage,
+  StateResponse,
+} from "@/lib/api-types";
 import {
   initialSyncState,
   syncReducer,
@@ -116,5 +120,61 @@ describe("sync ordering", () => {
     });
     expect(s.version).toBe(6);
     expect(s.samples).toEqual([a, b]);
+  });
+});
+
+describe("a snapshot of the whole job", () => {
+  const other = makeSample({ batchNumber: 2 });
+
+  function whole(
+    version: number,
+    feed: LogEvent[] = [],
+  ): AdminJobStateResponse {
+    const {
+      batch: _batch,
+      me: _me,
+      batches: _batches,
+      ...rest
+    } = snapshot(version, [a, b, other]);
+    return {
+      ...rest,
+      batches: [
+        { number: 1, boxNumber: 1, title: null },
+        { number: 2, boxNumber: 2, title: null },
+      ],
+      feed,
+    };
+  }
+
+  const watching = (version = 5, feed: LogEvent[] = []) =>
+    syncReducer<AdminJobStateResponse>(initialSyncState, {
+      type: "snapshot",
+      snapshot: whole(version, feed),
+    });
+
+  it("applies sample updates from every batch", () => {
+    const pulled = { ...a, pulledAt: T0 };
+    const finished = { ...other, finishedAt: T0 };
+    const s = syncReducer(watching(), {
+      type: "change",
+      change: change(6, [pulled, finished]),
+    });
+    expect(s.version).toBe(6);
+    expect(s.samples).toEqual([pulled, b, finished]);
+  });
+
+  it("starts the feed from the snapshot's events", () => {
+    const s = watching(5, [event(5, 5), event(4, 4)]);
+    expect(s.feed.map((e) => e.id)).toEqual([5, 4]);
+  });
+
+  it("merges a later snapshot's events with those already seen", () => {
+    let s = watching(5, [event(5, 5), event(4, 4)]);
+    s = syncReducer(s, { type: "change", change: change(6) });
+    s = syncReducer(s, {
+      type: "snapshot",
+      snapshot: whole(7, [event(7, 7), event(6, 6), event(5, 5)]),
+    });
+    expect(s.feed.map((e) => e.id)).toEqual([7, 6, 5, 4]);
   });
 });

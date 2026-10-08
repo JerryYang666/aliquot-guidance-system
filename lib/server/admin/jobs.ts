@@ -1,12 +1,22 @@
 import "server-only";
 
-import { sql } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
 
-import type { AdminJob } from "@/lib/api-types";
-import type { DbOrTx } from "@/lib/db";
+import type { AdminJob, AdminJobStateResponse } from "@/lib/api-types";
+import type { Db, DbOrTx } from "@/lib/db";
+import { batches, events, samples } from "@/lib/db/schema";
 
-import { ONLINE_WINDOW_SECONDS } from "../jobs";
-import { toIso } from "../rows";
+import {
+  getJobByCode,
+  ONLINE_WINDOW_SECONDS,
+  onlineParticipants,
+  toJobInfo,
+} from "../jobs";
+import { jobLayouts } from "../layouts";
+import { toIso, toLogEvent, toSample } from "../rows";
+
+/** How far back the activity feed of a job being watched starts. */
+const RECENT_EVENTS = 100;
 
 interface JobOverviewRow extends Record<string, unknown> {
   code: string;
@@ -54,4 +64,50 @@ export async function listAllJobs(db: DbOrTx): Promise<AdminJob[]> {
     online: row.online,
     lastActivityAt: toIso(row.last_activity_at),
   }));
+}
+
+/**
+ * A whole job as of one version: every batch's samples, who is online and
+ * the latest events. Reading it leaves no trace in the job; an admin who
+ * watches has not joined.
+ */
+export async function watchJob(
+  db: Db,
+  code: string,
+): Promise<AdminJobStateResponse> {
+  // One snapshot: the version and the rows it describes are read together.
+  return db.transaction(
+    async (tx) => {
+      const job = await getJobByCode(tx, code);
+      const sampleRows = await tx
+        .select()
+        .from(samples)
+        .where(eq(samples.jobId, job.id))
+        .orderBy(asc(samples.batchNumber), asc(samples.pullOrder));
+      const eventRows = await tx
+        .select()
+        .from(events)
+        .where(eq(events.jobId, job.id))
+        .orderBy(desc(events.id))
+        .limit(RECENT_EVENTS);
+      return {
+        version: job.version,
+        job: toJobInfo(job),
+        batches: await tx
+          .select({
+            number: batches.number,
+            boxNumber: batches.boxNumber,
+            title: batches.title,
+          })
+          .from(batches)
+          .where(eq(batches.jobId, job.id))
+          .orderBy(asc(batches.number)),
+        samples: sampleRows.map(toSample),
+        online: await onlineParticipants(tx, job.id),
+        feed: eventRows.map(toLogEvent),
+        layouts: await jobLayouts(tx, job.id),
+      };
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
 }

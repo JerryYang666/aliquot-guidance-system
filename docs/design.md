@@ -246,6 +246,17 @@ are the exception: they sign in at `/admin` and see every job.
 The admin page lists every job: code, creator, how many samples are
 aliquoted, how many people are online, and when it was last active.
 
+**Watch** opens one job live: every batch's progress and who is on it, with
+one batch opened up as the Overview role sees it (the box grid, progress,
+people online, activity), following whichever batch people are working on
+until the admin picks another. The admin has not joined the job. Watching
+writes no event, does not appear on the job's online list, and cannot change
+a sample; to fix something, join the job as Overview like anyone else. The
+screen stays in sync the way a station's does (see
+[Real-time sync](#real-time-sync)), through its own endpoints under
+`/api/admin/jobs/<code>`, except that it holds every batch's samples rather
+than one batch's, and its snapshot brings the latest events with it.
+
 ## Seeding the first job
 
 The workbook's sample data does not go in the repository.

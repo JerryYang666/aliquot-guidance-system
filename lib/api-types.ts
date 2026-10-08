@@ -144,6 +144,19 @@ export interface AdminOverviewResponse {
   passkeys: AdminPasskey[];
 }
 
+/** A whole job as an admin watches it: every batch, as of one job version. */
+export interface AdminJobStateResponse {
+  version: number;
+  job: JobInfo;
+  batches: Batch[];
+  /** Every sample, in batch and pull-list order. */
+  samples: Sample[];
+  online: OnlineParticipant[];
+  /** The latest events, newest first. */
+  feed: LogEvent[];
+  layouts: JobLayouts;
+}
+
 export interface AdminInviteResponse {
   /** The link's path on this site: /admin/invite/<token>. */
   path: string;

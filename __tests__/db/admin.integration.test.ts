@@ -262,4 +262,29 @@ describe.skipIf(!url)("admins against Postgres", () => {
       job!.lastActivityAt,
     );
   });
+
+  it("shows a whole job to an admin who is watching, without joining it", async () => {
+    const [listed] = await mod.jobs.listAllJobs(db());
+    const before = await db().select().from(mod.schema.events);
+
+    const state = await mod.jobs.watchJob(db(), listed!.code);
+
+    expect(state.job).toMatchObject({ code: listed!.code, name: "Listed job" });
+    expect(state.batches).toEqual([{ number: 1, boxNumber: 1, title: null }]);
+    expect(state.samples.map((s) => s.newId)).toEqual(["S0001", "S0002"]);
+    expect(state.online).toMatchObject([{ name: "Pat", role: "puller" }]);
+    expect(state.feed.map((e) => e.type)).toEqual([
+      "participant_joined",
+      "job_created",
+    ]);
+    expect(state.version).toBe(state.feed[0]?.version);
+    expect(state.layouts.dest.rows).toEqual(["A"]);
+    // Watching wrote nothing: no event, no participant.
+    expect(await db().select().from(mod.schema.events)).toEqual(before);
+    expect(await db().select().from(mod.schema.participants)).toHaveLength(1);
+
+    await expect(mod.jobs.watchJob(db(), "ZZZZZZZZ")).rejects.toMatchObject({
+      status: 404,
+    });
+  });
 });

@@ -4,14 +4,28 @@
  * buffer for the one before it; a snapshot replaces everything up to its
  * version. A buffer that does not drain means a message was lost, and the
  * screen refetches (see useJobSync).
+ *
+ * A station's snapshot is one batch, and changes to other batches pass it
+ * by. An admin watching a job holds every batch, and that snapshot brings
+ * the latest events with it, since the admin was not there to see them.
  */
 import type { ChangeMessage, StateResponse } from "@/lib/api-types";
 import type { LogEvent, Sample } from "@/lib/pipeline/types";
 
 export const FEED_LIMIT = 150;
 
-export interface SyncState {
-  snapshot: StateResponse | null;
+/** What changes are applied on top of. */
+export interface Snapshot {
+  version: number;
+  samples: Sample[];
+  /** The one batch this screen holds; absent when it holds the whole job. */
+  batch?: { number: number };
+  /** Events from before this screen was watching, newest first. */
+  feed?: LogEvent[];
+}
+
+export interface SyncState<S extends Snapshot = StateResponse> {
+  snapshot: S | null;
   version: number;
   samples: Sample[];
   /** Recent events from every batch, newest first. */
@@ -20,7 +34,7 @@ export interface SyncState {
   pending: ChangeMessage[];
 }
 
-export const initialSyncState: SyncState = {
+export const initialSyncState: SyncState<never> = {
   snapshot: null,
   version: 0,
   samples: [],
@@ -28,10 +42,15 @@ export const initialSyncState: SyncState = {
   pending: [],
 };
 
-function apply(state: SyncState, change: ChangeMessage): SyncState {
-  const batch = state.snapshot?.batch.number;
+function apply<S extends Snapshot>(
+  state: SyncState<S>,
+  change: ChangeMessage,
+): SyncState<S> {
+  const batch = state.snapshot?.batch?.number;
   const updates = new Map(
-    change.samples.filter((s) => s.batchNumber === batch).map((s) => [s.id, s]),
+    change.samples
+      .filter((s) => batch === undefined || s.batchNumber === batch)
+      .map((s) => [s.id, s]),
   );
   const seen = new Set(state.feed.map((e) => e.id));
   const fresh = change.events.filter((e) => !seen.has(e.id)).reverse();
@@ -47,7 +66,13 @@ function apply(state: SyncState, change: ChangeMessage): SyncState {
   };
 }
 
-function drain(state: SyncState): SyncState {
+/** Both lists as one, newest first, each event once. */
+function mergeFeeds(a: LogEvent[], b: LogEvent[]): LogEvent[] {
+  const byId = new Map([...a, ...b].map((e) => [e.id, e]));
+  return [...byId.values()].sort((x, y) => y.id - x.id).slice(0, FEED_LIMIT);
+}
+
+function drain<S extends Snapshot>(state: SyncState<S>): SyncState<S> {
   let next = state;
   for (;;) {
     const following = next.pending.find((c) => c.version === next.version + 1);
@@ -60,12 +85,15 @@ function drain(state: SyncState): SyncState {
   };
 }
 
-export type SyncAction =
-  | { type: "snapshot"; snapshot: StateResponse }
+export type SyncAction<S extends Snapshot = StateResponse> =
+  | { type: "snapshot"; snapshot: S }
   | { type: "change"; change: ChangeMessage }
   | { type: "reset" };
 
-export function syncReducer(state: SyncState, action: SyncAction): SyncState {
+export function syncReducer<S extends Snapshot = StateResponse>(
+  state: SyncState<S>,
+  action: SyncAction<S>,
+): SyncState<S> {
   switch (action.type) {
     case "reset":
       return initialSyncState;
@@ -80,6 +108,9 @@ export function syncReducer(state: SyncState, action: SyncAction): SyncState {
         snapshot,
         version: snapshot.version,
         samples: snapshot.samples,
+        feed: snapshot.feed
+          ? mergeFeeds(state.feed, snapshot.feed)
+          : state.feed,
       });
     }
     case "change": {

@@ -34,7 +34,7 @@ import { ROLE_LABELS, type LogEvent, type Sample } from "@/lib/pipeline/types";
 
 import { Badge, cx } from "../ui";
 
-function ConnectionPill({ connection }: { connection: Connection }) {
+export function ConnectionPill({ connection }: { connection: Connection }) {
   const label = { live: "Live", polling: "Polling", connecting: "Connecting" }[
     connection
   ];
