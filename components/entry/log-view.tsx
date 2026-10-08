@@ -178,7 +178,7 @@ export function LogView({ code }: { code: string }) {
                   {e.actorRole && (
                     <span className="text-slate-400">
                       {" "}
-                      · {ROLE_LABELS[e.actorRole as Role]}
+                      · {ROLE_LABELS[e.actorRole as Role] ?? e.actorRole}
                     </span>
                   )}
                 </td>

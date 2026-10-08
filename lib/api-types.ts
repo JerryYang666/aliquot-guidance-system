@@ -152,6 +152,8 @@ export interface AdminJob {
   finished: number;
   online: number;
   lastActivityAt: string | null;
+  /** Set while the job is archived. */
+  archivedAt: string | null;
 }
 
 /** A passkey that can sign in as an admin. */

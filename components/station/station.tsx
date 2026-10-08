@@ -201,7 +201,9 @@ export function Station({ code }: { code: string }) {
               If their device is off or has lost its connection, that takes
               about a minute.
             </p>
-            <Button onClick={() => void leave()}>Pick another role</Button>
+            {sync.snapshot.job.archivedAt === null && (
+              <Button onClick={() => void leave()}>Pick another role</Button>
+            )}
           </Card>
         </main>
       ) : (

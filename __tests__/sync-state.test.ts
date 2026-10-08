@@ -29,6 +29,7 @@ function snapshot(version: number, samples: Sample[] = [a, b]): StateResponse {
       destSets: ["Ship"],
       createdAt: T0,
       createdBy: "x",
+      archivedAt: null,
     },
     batch: { number: 1, boxNumber: 1, title: null },
     batches: [],

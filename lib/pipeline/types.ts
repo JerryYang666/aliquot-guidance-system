@@ -71,6 +71,8 @@ export interface JobInfo {
   destSets: string[];
   createdAt: string;
   createdBy: string;
+  /** Set while the job is archived: nobody new can join it. */
+  archivedAt: string | null;
 }
 
 /** An event about to be appended to the log. */
@@ -85,6 +87,8 @@ export interface EventDraft {
 
 export type EventType =
   | "job_created"
+  | "job_archived"
+  | "job_reopened"
   | "participant_joined"
   | "participant_left"
   | "sample_pulled"

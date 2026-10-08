@@ -38,6 +38,7 @@ cp .env.example .env.local      # set DATABASE_URL and APP_SECRET; leave RELAY_*
 psql "<your DATABASE_URL>" -f migrations/0001_init.sql
 psql "<your DATABASE_URL>" -f migrations/0002_admin_passkeys.sql
 psql "<your DATABASE_URL>" -f migrations/0003_participant_presence.sql
+psql "<your DATABASE_URL>" -f migrations/0004_job_archived.sql
 npm run dev                     # http://localhost:3000
 ```
 

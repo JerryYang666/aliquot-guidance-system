@@ -32,6 +32,7 @@ export const jobs = pgTable("jobs", {
     .notNull()
     .default(sql`clock_timestamp()`),
   version: bigint("version", { mode: "number" }).notNull().default(0),
+  archivedAt: ts("archived_at"),
 });
 
 export const batches = pgTable(

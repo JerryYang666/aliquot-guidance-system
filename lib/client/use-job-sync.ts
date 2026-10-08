@@ -230,6 +230,10 @@ function useSync<
           if (change.events.some((ev) => ev.type.startsWith("participant_"))) {
             void refreshOnline();
           }
+          // Archiving changes the job itself, which only a snapshot carries.
+          if (change.events.some((ev) => ev.type.startsWith("job_"))) {
+            void refresh();
+          }
         }
       };
       socket.onclose = () => {

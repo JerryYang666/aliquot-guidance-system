@@ -92,6 +92,13 @@ export async function joinJob(
         events: [],
       };
     }
+    if (job.archivedAt) {
+      throw new HttpError(
+        403,
+        "archived",
+        "This job is archived, so nobody new can join it. An admin can reopen it.",
+      );
+    }
     await tx.insert(participants).values({
       id: participantId,
       jobId,

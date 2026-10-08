@@ -26,6 +26,7 @@ describe.skipIf(!url)("admins against Postgres", () => {
       jobs: await import("@/lib/server/admin/jobs"),
       createJob: await import("@/lib/server/create-job"),
       participants: await import("@/lib/server/participants"),
+      actions: await import("@/lib/server/actions"),
     };
   }
 
@@ -286,5 +287,103 @@ describe.skipIf(!url)("admins against Postgres", () => {
     await expect(mod.jobs.watchJob(db(), "ZZZZZZZZ")).rejects.toMatchObject({
       status: 404,
     });
+  });
+
+  it("archives a job against new joiners, and reopens it", async () => {
+    const admin = { id: crypto.randomUUID(), name: "Root" };
+    const { code, jobId } = await mod.createJob.createJob(db(), {
+      name: "Finished job",
+      createdBy: "Setup",
+      sourceFilename: null,
+      workbook: {
+        destSets: ["Ship", "Keep2", "Keep3"],
+        batches: [
+          {
+            number: 1,
+            boxNumber: 1,
+            samples: [
+              {
+                pullOrder: 1,
+                newId: "S0001",
+                originalId: "41540",
+                sourceBox: "case_box 1",
+                sourceLocation: "case box",
+                sourcePosition: "1-C-1",
+                slot: "A1",
+                volumeNote: null,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const join = (name: string, attempt?: string) =>
+      mod.participants.joinJob(
+        db(),
+        jobId,
+        { name, role: "overview", batchNumber: 1, attempt },
+        null,
+      );
+    const listed = async () =>
+      (await mod.jobs.listAllJobs(db())).map((j) => ({
+        name: j.name,
+        archived: j.archivedAt !== null,
+      }));
+
+    // Pia is on the job before it is archived.
+    const attempt = crypto.randomUUID();
+    const pia = await join("Pia", attempt);
+    expect((await listed())[0]).toEqual({
+      name: "Finished job",
+      archived: false,
+    });
+
+    const archived = await mod.jobs.setJobArchived(db(), code, admin, true);
+    expect(archived?.events).toMatchObject([
+      { type: "job_archived", actorName: "Root", actorRole: "admin" },
+    ]);
+    // It is the newest job, and now listed after the open ones.
+    expect((await listed()).at(-1)).toEqual({
+      name: "Finished job",
+      archived: true,
+    });
+    expect((await mod.jobs.watchJob(db(), code)).job.archivedAt).not.toBeNull();
+
+    // Nobody new gets in, and nothing is recorded of the attempt.
+    await expect(join("Newcomer")).rejects.toMatchObject({
+      status: 403,
+      code: "archived",
+    });
+    expect(await db().select().from(mod.schema.participants)).toHaveLength(2);
+
+    // Pia carries on: she is heard from, her work is accepted, and a join
+    // of hers that is sent again still gets its answer.
+    await mod.participants.heartbeat(db(), pia.participant);
+    const [sample] = await db()
+      .select()
+      .from(mod.schema.samples)
+      .where(eq(mod.schema.samples.jobId, jobId));
+    const pulled = await mod.actions.performAction(db(), pia.participant, {
+      clientActionId: crypto.randomUUID(),
+      clientAt: new Date().toISOString(),
+      action: { type: "pull", sampleId: sample!.id },
+    });
+    expect(pulled.ok).toBe(true);
+    expect((await join("Pia", attempt)).participant).toEqual(pia.participant);
+
+    // Archiving what is archived changes nothing and logs nothing.
+    expect(await mod.jobs.setJobArchived(db(), code, admin, true)).toBeNull();
+
+    // Reopened, it takes people again, and the log has both changes.
+    const reopened = await mod.jobs.setJobArchived(db(), code, admin, false);
+    expect(reopened?.events).toMatchObject([{ type: "job_reopened" }]);
+    expect(reopened?.version).toBe(archived!.version + 2);
+    await join("Newcomer");
+    expect((await mod.jobs.watchJob(db(), code)).job.archivedAt).toBeNull();
+    expect(await mod.jobs.setJobArchived(db(), code, admin, false)).toBeNull();
+
+    await expect(
+      mod.jobs.setJobArchived(db(), "ZZZZZZZZ", admin, true),
+    ).rejects.toMatchObject({ status: 404 });
   });
 });

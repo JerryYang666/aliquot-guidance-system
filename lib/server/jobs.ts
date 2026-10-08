@@ -71,6 +71,7 @@ export function toJobInfo(job: JobRow): JobInfo {
     destSets: job.destSets,
     createdAt: toIso(job.createdAt),
     createdBy: job.createdBy,
+    archivedAt: toIso(job.archivedAt),
   };
 }
 

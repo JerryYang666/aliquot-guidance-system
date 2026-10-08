@@ -158,7 +158,8 @@ transaction as the events that change them, so they can never disagree.
 `admin_invites` (see [Admins](#admins)).
 `migrations/0003_participant_presence.sql` adds to `participants` when a
 station said goodbye and since when it has been in line for its role (see
-[Real-time sync](#real-time-sync)).
+[Real-time sync](#real-time-sync)). `migrations/0004_job_archived.sql` adds
+to `jobs` when the job was archived (see [Admins](#admins)).
 
 ### Actions and ordering
 
@@ -276,6 +277,15 @@ are the exception: they sign in at `/admin` and see every job.
 
 The admin page lists every job: code, creator, how many samples are
 aliquoted, how many people are online, and when it was last active.
+
+**Archive** closes a job to new people. A job's code works for as long as
+the job exists, so a finished job could otherwise still be joined by anyone
+who kept its code or QR code. Once a job is archived, joining it is refused
+and its join page says so. The people already on it carry on working, and
+their screens show that the job is archived: the QR button goes, and
+leaving is marked as final, since they could not join again. **Unarchive**
+opens the job again. Both are logged in the job's own event log under the
+admin's name, and archived jobs are listed after the open ones.
 
 **Watch** opens one job live: every batch's progress and who is on it, with
 one batch opened up as the Overview role sees it (the box grid, progress,

@@ -137,6 +137,11 @@ export function JobWatch({ code }: { code: string }) {
             </div>
             <div className="flex flex-wrap items-center gap-x-2 text-sm text-slate-300">
               <span className="font-semibold text-white">Watching</span>
+              {job.archivedAt && (
+                <span className="rounded bg-amber-400 px-1.5 py-0.5 text-xs font-semibold text-slate-900">
+                  Archived
+                </span>
+              )}
               <span>·</span>
               <span>
                 {finished}/{samples.length} aliquoted

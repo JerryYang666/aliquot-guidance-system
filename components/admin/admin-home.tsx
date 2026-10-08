@@ -1,6 +1,13 @@
 "use client";
 
-import { Copy, Eye, LogOut, UserPlus } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  Copy,
+  Eye,
+  LogOut,
+  UserPlus,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -40,11 +47,50 @@ function ago(iso: string, now: number): string {
   return day(iso);
 }
 
-function JobRow({ job, now }: { job: AdminJob; now: number }) {
+function JobRow({
+  job,
+  now,
+  onChange,
+}: {
+  job: AdminJob;
+  now: number;
+  onChange: () => Promise<void>;
+}) {
+  const archived = job.archivedAt !== null;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Archiving stops new people joining; those already on the job carry on.
+  const setArchived = async (to: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/admin/jobs/${job.code}/archive`, {
+        method: to ? "POST" : "DELETE",
+        retry: false,
+      });
+      await onChange();
+    } catch (e) {
+      setError(failure(e, "Could not change the job."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <li className="grid gap-x-6 gap-y-2 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-center">
       <div className="min-w-0">
-        <div className="truncate font-semibold">{job.name}</div>
+        <div className="flex items-center gap-2">
+          <span
+            className={cx(
+              "truncate font-semibold",
+              archived && "text-slate-500",
+            )}
+          >
+            {job.name}
+          </span>
+          {archived && <Badge>Archived</Badge>}
+        </div>
         <div className="text-sm text-slate-500">
           <span className="font-mono">{formatJobCode(job.code)}</span> ·{" "}
           {job.createdBy} · {day(job.createdAt)}
@@ -68,20 +114,38 @@ function JobRow({ job, now }: { job: AdminJob; now: number }) {
             ` · last activity ${ago(job.lastActivityAt, now)}`}
         </div>
       </div>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Link
           href={`/admin/jobs/${job.code}`}
           className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800"
         >
           <Eye className="size-4" /> Watch
         </Link>
-        <Link
-          href={`/j/${job.code}`}
-          className="inline-flex h-8 items-center justify-center rounded-lg bg-white px-3 text-sm font-medium ring-1 ring-slate-300 hover:bg-slate-50"
+        {!archived && (
+          <Link
+            href={`/j/${job.code}`}
+            className="inline-flex h-8 items-center justify-center rounded-lg bg-white px-3 text-sm font-medium ring-1 ring-slate-300 hover:bg-slate-50"
+          >
+            Join
+          </Link>
+        )}
+        <Button
+          size="sm"
+          disabled={busy}
+          onClick={() => void setArchived(!archived)}
         >
-          Join
-        </Link>
+          {archived ? (
+            <>
+              <ArchiveRestore className="size-4" /> Unarchive
+            </>
+          ) : (
+            <>
+              <Archive className="size-4" /> Archive
+            </>
+          )}
+        </Button>
       </div>
+      {error && <p className="text-sm text-red-700 sm:col-span-3">{error}</p>}
     </li>
   );
 }
@@ -310,7 +374,12 @@ export function AdminHome({ me }: { me: Me }) {
             {data.jobs.length ? (
               <ul className="divide-y divide-slate-100">
                 {data.jobs.map((job) => (
-                  <JobRow key={job.code} job={job} now={data.at} />
+                  <JobRow
+                    key={job.code}
+                    job={job}
+                    now={data.at}
+                    onChange={load}
+                  />
                 ))}
               </ul>
             ) : (

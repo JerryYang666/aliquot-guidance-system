@@ -11,6 +11,10 @@ export function describeEvent(e: LogEvent): string {
   switch (e.type) {
     case "job_created":
       return `created the job (${String(d.samples)} samples in ${String(d.batches)} batches)`;
+    case "job_archived":
+      return "archived the job: nobody new can join it";
+    case "job_reopened":
+      return "reopened the job: people can join it again";
     case "participant_joined":
       return `joined as ${ROLE_LABELS[e.actorRole as Role] ?? e.actorRole} on batch ${e.batchNumber}`;
     case "participant_left":

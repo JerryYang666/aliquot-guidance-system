@@ -1,6 +1,6 @@
 "use client";
 
-import { QrCode } from "lucide-react";
+import { Archive, QrCode } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -142,6 +142,8 @@ export function JoinForm({ code }: { code: string }) {
   }
   if (!summary) return <p className="text-slate-500">Loading job…</p>;
 
+  const archived = summary.job.archivedAt !== null;
+
   // Who holds a working role on the chosen batch, if anyone does. Joining
   // it anyway means waiting for them. This tab's own station does not
   // count: joining from here replaces it.
@@ -165,9 +167,11 @@ export function JoinForm({ code }: { code: string }) {
           </div>
           <h1 className="text-2xl font-bold">{summary.job.name}</h1>
         </div>
-        <Button className="shrink-0" onClick={() => setQrOpen(true)}>
-          <QrCode className="size-4" /> QR code to join
-        </Button>
+        {!archived && (
+          <Button className="shrink-0" onClick={() => setQrOpen(true)}>
+            <QrCode className="size-4" /> QR code to join
+          </Button>
+        )}
       </div>
       {qrOpen && <JoinQrDialog code={code} onClose={() => setQrOpen(false)} />}
       {reading && role && (
@@ -195,98 +199,121 @@ export function JoinForm({ code }: { code: string }) {
         </Card>
       )}
 
-      <Card className="flex flex-col gap-2">
-        <label htmlFor="name">
-          <Label>Your name</Label>
-        </label>
-        <input
-          id="name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={60}
-          required
-          autoComplete="name"
-          className="h-12 rounded-lg px-3 text-lg ring-1 ring-slate-300"
-        />
-      </Card>
+      {archived ? (
+        <Card className="flex items-start gap-3 p-6">
+          <Archive className="mt-0.5 size-6 shrink-0 text-slate-500" />
+          <div>
+            <h2 className="text-lg font-semibold">This job is archived</h2>
+            <p className="mt-1 text-slate-600">
+              Nobody new can join it.{" "}
+              {existing
+                ? "This tab joined before it was archived, so it can carry on."
+                : "If it should be open, ask an admin to reopen it."}
+            </p>
+            <Link href="/" className="mt-3 inline-block text-sm underline">
+              Try another code
+            </Link>
+          </div>
+        </Card>
+      ) : (
+        <>
+          <Card className="flex flex-col gap-2">
+            <label htmlFor="name">
+              <Label>Your name</Label>
+            </label>
+            <input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={60}
+              required
+              autoComplete="name"
+              className="h-12 rounded-lg px-3 text-lg ring-1 ring-slate-300"
+            />
+          </Card>
 
-      <Card className="flex flex-col gap-2">
-        <Label>Batch</Label>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-          {summary.batches.map((b) => (
-            <button
-              key={b.number}
-              type="button"
-              onClick={() => setBatch(b.number)}
-              aria-pressed={chosenBatch === b.number}
-              className={cx(
-                "rounded-xl p-3 text-left ring-1",
-                chosenBatch === b.number
-                  ? "bg-slate-900 text-white ring-slate-900"
-                  : "bg-white ring-slate-200 hover:ring-slate-400",
-              )}
-            >
-              <div className="font-semibold">Batch {b.number}</div>
-              <div className="font-mono text-xs opacity-80">
-                {b.firstNewId}–{b.lastNewId}
-              </div>
-              <div className="text-xs opacity-80">
-                {b.finished}/{b.total} done
-              </div>
-            </button>
-          ))}
-        </div>
-      </Card>
-
-      <Card className="flex flex-col gap-2">
-        <Label>Your role</Label>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {ROLE_INFO.map(({ role: r, text }) => {
-            const Icon = ROLE_ICONS[r];
-            const holder = holderOf(r);
-            return (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setRole(r)}
-                aria-pressed={role === r}
-                className={cx(
-                  "flex items-start gap-3 rounded-xl p-4 text-left ring-1",
-                  role === r
-                    ? "bg-slate-900 text-white ring-slate-900"
-                    : "bg-white ring-slate-200 hover:ring-slate-400",
-                )}
-              >
-                <Icon className="mt-0.5 size-6 shrink-0" />
-                <span>
-                  <span className="block font-semibold">{ROLE_LABELS[r]}</span>
-                  <span className="block text-sm opacity-80">{text}</span>
-                  {holder && (
-                    <span
-                      className={cx(
-                        "mt-1 block text-sm font-medium",
-                        role === r ? "text-amber-300" : "text-amber-700",
-                      )}
-                    >
-                      {holder.name} has this role now. You would wait for them.
-                    </span>
+          <Card className="flex flex-col gap-2">
+            <Label>Batch</Label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {summary.batches.map((b) => (
+                <button
+                  key={b.number}
+                  type="button"
+                  onClick={() => setBatch(b.number)}
+                  aria-pressed={chosenBatch === b.number}
+                  className={cx(
+                    "rounded-xl p-3 text-left ring-1",
+                    chosenBatch === b.number
+                      ? "bg-slate-900 text-white ring-slate-900"
+                      : "bg-white ring-slate-200 hover:ring-slate-400",
                   )}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </Card>
+                >
+                  <div className="font-semibold">Batch {b.number}</div>
+                  <div className="font-mono text-xs opacity-80">
+                    {b.firstNewId}–{b.lastNewId}
+                  </div>
+                  <div className="text-xs opacity-80">
+                    {b.finished}/{b.total} done
+                  </div>
+                </button>
+              ))}
+            </div>
+          </Card>
 
-      {error && <p className="text-red-700">{error}</p>}
-      <Button
-        type="submit"
-        variant="primary"
-        size="xl"
-        disabled={joining || !role || !name.trim() || !chosenBatch}
-      >
-        Start
-      </Button>
+          <Card className="flex flex-col gap-2">
+            <Label>Your role</Label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {ROLE_INFO.map(({ role: r, text }) => {
+                const Icon = ROLE_ICONS[r];
+                const holder = holderOf(r);
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRole(r)}
+                    aria-pressed={role === r}
+                    className={cx(
+                      "flex items-start gap-3 rounded-xl p-4 text-left ring-1",
+                      role === r
+                        ? "bg-slate-900 text-white ring-slate-900"
+                        : "bg-white ring-slate-200 hover:ring-slate-400",
+                    )}
+                  >
+                    <Icon className="mt-0.5 size-6 shrink-0" />
+                    <span>
+                      <span className="block font-semibold">
+                        {ROLE_LABELS[r]}
+                      </span>
+                      <span className="block text-sm opacity-80">{text}</span>
+                      {holder && (
+                        <span
+                          className={cx(
+                            "mt-1 block text-sm font-medium",
+                            role === r ? "text-amber-300" : "text-amber-700",
+                          )}
+                        >
+                          {holder.name} has this role now. You would wait for
+                          them.
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
+
+          {error && <p className="text-red-700">{error}</p>}
+          <Button
+            type="submit"
+            variant="primary"
+            size="xl"
+            disabled={joining || !role || !name.trim() || !chosenBatch}
+          >
+            Start
+          </Button>
+        </>
+      )}
     </form>
   );
 }

@@ -140,6 +140,9 @@ export function StationHeader({
 
   const RoleIcon = ROLE_ICONS[me.role];
   const station = `Batch ${batch.number} · Box ${batch.boxNumber}`;
+  // An archived job takes no new joiners, so there is nobody to show the QR
+  // code to, and leaving it is for good.
+  const archived = job.archivedAt !== null;
   // A phone has little height to spare, so there the bar slides away while
   // the page is scrolled down and returns on the first scroll back up. It
   // stays while one of its own menus is open.
@@ -179,6 +182,11 @@ export function StationHeader({
               {station}
             </span>
             <span className="min-w-0 flex-1 truncate text-sm text-slate-300">
+              {archived && (
+                <span className="mr-2 rounded bg-amber-400 px-1.5 py-0.5 text-xs font-semibold text-slate-900">
+                  Archived
+                </span>
+              )}
               {me.name}
               {" · "}
               {job.name}
@@ -186,10 +194,12 @@ export function StationHeader({
                 {formatJobCode(job.code)}
               </span>
             </span>
-            <JoinQrButton
-              className="inline-flex lg:hidden"
-              onClick={() => showQr(true)}
-            />
+            {!archived && (
+              <JoinQrButton
+                className="inline-flex lg:hidden"
+                onClick={() => showQr(true)}
+              />
+            )}
           </div>
           <div className="col-start-3 row-start-1 flex items-center gap-3 lg:row-span-2">
             <ConnectionPill connection={connection} />
@@ -230,10 +240,12 @@ export function StationHeader({
                 </div>
               )}
             </div>
-            <JoinQrButton
-              className="hidden lg:inline-flex"
-              onClick={() => showQr(true)}
-            />
+            {!archived && (
+              <JoinQrButton
+                className="hidden lg:inline-flex"
+                onClick={() => showQr(true)}
+              />
+            )}
             <div className="relative">
               <button
                 type="button"
@@ -279,7 +291,17 @@ export function StationHeader({
                     onClick={onLeave}
                     className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-red-700 hover:bg-red-50"
                   >
-                    <LogOut className="size-4" /> Switch role or batch
+                    <LogOut className="size-4 shrink-0" />
+                    {archived ? (
+                      <span className="text-left">
+                        Leave this job
+                        <span className="block text-xs">
+                          It is archived: you could not join again.
+                        </span>
+                      </span>
+                    ) : (
+                      "Switch role or batch"
+                    )}
                   </button>
                 </nav>
               )}
