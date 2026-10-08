@@ -89,5 +89,6 @@ TEST_DATABASE_URL=postgres://localhost/ags_test npm test
 | `lib/workbook/`       | Reading and validating aliquot workbooks                                                                     |
 | `migrations/`         | SQL schema, applied by hand in order                                                                         |
 | `realtime/`           | The Go relay                                                                                                 |
+| `docs/explainer/`     | The explainer video for new operators; `scripts/render-explainer.mjs` (`npm run explainer`) renders it       |
 | `deploy/relay/`       | Docker Compose + Caddy for the relay host                                                                    |
 | `scripts/`            | `workbook-to-seed-sql.ts` (seed a job without the UI), `admin-invite-sql.ts` (the first admin's invite link) |

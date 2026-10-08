@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aliquot Guide explainer</title>
+    <style>
+      :root {
+        --bg: #f1f5f9;
+        --ink: #0f172a;
+        --ink-2: #334155;
+        --mute: #64748b;
+        --faint: #94a3b8;
+        --line: #e2e8f0;
+        --set-1: #1d4ed8;
+        --set-1-soft: #dbeafe;
+        --set-2: #047857;
+        --set-2-soft: #d1fae5;
+        --set-3: #7c3aed;
+        --set-3-soft: #ede9fe;
+        --attention: #f59e0b;
+        --sans:
+          Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        --mono:
+          "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas,
+          "DejaVu Sans Mono", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0b1120;
+        overflow: hidden;
+      }
+
+      #stage {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--sans);
+        transform-origin: 0 0;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .scene,
+      .layer {
+        position: absolute;
+        inset: 0;
+      }
+
+      .abs {
+        position: absolute;
+        left: 0;
+        top: 0;
+        transform-origin: 50% 50%;
+      }
+
+      .tnum {
+        font-variant-numeric: tabular-nums;
+      }
+
+      .mono {
+        font-family: var(--mono);
+        font-feature-settings: "zero" 0;
+      }
+
+      .ic {
+        display: block;
+        flex: none;
+      }
+
+      /* Section headers */
+      .eyebrow {
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--mute);
+      }
+
+      .heading {
+        margin-top: 10px;
+        font-size: 60px;
+        line-height: 1.05;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        white-space: nowrap;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: var(--ink-2);
+      }
+
+      .progress {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        height: 6px;
+        width: 1920px;
+        background: rgba(15, 23, 42, 0.06);
+      }
+
+      .progress > i {
+        display: block;
+        height: 100%;
+        width: 100%;
+        background: var(--ink);
+        transform-origin: 0 50%;
+      }
+
+      /* Cards and chips used across scenes */
+      .panel {
+        background: #fff;
+        border-radius: 24px;
+        box-shadow:
+          0 1px 2px rgba(15, 23, 42, 0.06),
+          0 18px 40px -18px rgba(15, 23, 42, 0.25);
+        border: 1px solid var(--line);
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 18px;
+        border-radius: 999px;
+        font-size: 24px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .chip.dark {
+        background: var(--ink);
+        color: #fff;
+      }
+
+      .chip.light {
+        background: #fff;
+        color: var(--ink);
+        box-shadow:
+          0 0 0 1px var(--line),
+          0 10px 24px -12px rgba(15, 23, 42, 0.3);
+      }
+
+      .role-square {
+        display: grid;
+        place-items: center;
+        border-radius: 22%;
+        background: var(--ink);
+        color: #fff;
+        flex: none;
+      }
+
+      .keycap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        height: 104px;
+        padding: 0 40px;
+        border-radius: 20px;
+        background: linear-gradient(#ffffff, #f1f5f9);
+        border: 2px solid #cbd5e1;
+        box-shadow:
+          0 10px 0 #cbd5e1,
+          0 22px 30px -10px rgba(15, 23, 42, 0.35);
+        font-size: 36px;
+        font-weight: 700;
+        color: var(--ink-2);
+        white-space: nowrap;
+      }
+
+      .callout {
+        padding: 8px 16px;
+        border-radius: 12px;
+        background: var(--attention);
+        color: #fff;
+        font-size: 24px;
+        font-weight: 800;
+        white-space: nowrap;
+        box-shadow: 0 10px 24px -10px rgba(180, 83, 9, 0.6);
+      }
+
+      .caption {
+        position: absolute;
+        left: 96px;
+        top: 900px;
+        display: flex;
+        align-items: center;
+        gap: 28px;
+      }
+
+      .caption .num {
+        display: grid;
+        place-items: center;
+        width: 88px;
+        height: 88px;
+        border-radius: 50%;
+        background: var(--ink);
+        color: #fff;
+        font-size: 46px;
+        font-weight: 800;
+        flex: none;
+      }
+
+      .caption .of {
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--mute);
+      }
+
+      .caption .text {
+        margin-top: 4px;
+        font-size: 50px;
+        font-weight: 800;
+        letter-spacing: -0.025em;
+        white-space: nowrap;
+      }
+
+      /* The app's own look, for the station screens */
+      .window {
+        border-radius: 18px;
+        overflow: hidden;
+        background: #fff;
+        box-shadow:
+          0 0 0 1px rgba(15, 23, 42, 0.08),
+          0 40px 80px -30px rgba(15, 23, 42, 0.45);
+      }
+
+      .window-bar {
+        height: 40px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 16px;
+        background: #e2e8f0;
+      }
+
+      .window-bar i {
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+        background: #cbd5e1;
+      }
+
+      .phone {
+        border-radius: 56px;
+        padding: 14px;
+        background: #0f172a;
+        box-shadow:
+          0 0 0 2px #334155,
+          0 40px 80px -30px rgba(15, 23, 42, 0.6);
+      }
+
+      .phone-screen {
+        position: relative;
+        border-radius: 44px;
+        overflow: hidden;
+        background: #f1f5f9;
+      }
+
+      .app {
+        position: relative;
+        overflow: hidden;
+        background: #f1f5f9;
+        color: var(--ink);
+        font-size: 16px;
+      }
+
+      .hdr {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 12px 20px;
+        background: #0f172a;
+        color: #fff;
+      }
+
+      .hdr-ic {
+        display: grid;
+        place-items: center;
+        width: 52px;
+        height: 52px;
+        border-radius: 12px;
+        background: #fff;
+        color: #0f172a;
+        flex: none;
+      }
+
+      .hdr-line {
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        white-space: nowrap;
+      }
+
+      .hdr-role {
+        font-size: 30px;
+      }
+
+      .hdr-station {
+        font-size: 24px;
+        color: #e2e8f0;
+      }
+
+      .hdr-sub {
+        margin-top: 2px;
+        font-size: 14px;
+        color: #cbd5e1;
+        white-space: nowrap;
+      }
+
+      .hdr-right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 13px;
+        color: #cbd5e1;
+        white-space: nowrap;
+      }
+
+      .live {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .live::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #34d399;
+      }
+
+      .qr-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 10px;
+        border-radius: 6px;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+        color: #fff;
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .strip {
+        display: flex;
+        gap: 26px;
+        padding: 7px 20px;
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+        font-size: 14px;
+        color: var(--mute);
+        white-space: nowrap;
+      }
+
+      .strip b {
+        margin-left: 6px;
+        font-family: var(--mono);
+        font-weight: 600;
+        color: var(--ink);
+      }
+
+      .card {
+        position: relative;
+        background: #fff;
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+        padding: 16px;
+      }
+
+      .lbl {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--mute);
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        height: 64px;
+        padding: 0 24px;
+        border-radius: 8px;
+        font-size: 20px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      .btn.primary {
+        background: #0f172a;
+        color: #fff;
+      }
+
+      .btn.secondary {
+        background: #fff;
+        color: #0f172a;
+        box-shadow: inset 0 0 0 1px #cbd5e1;
+      }
+
+      .btn.sm {
+        height: 32px;
+        padding: 0 12px;
+        font-size: 14px;
+        gap: 6px;
+      }
+
+      .btn.md {
+        height: 40px;
+        padding: 0 16px;
+        font-size: 14px;
+        gap: 8px;
+      }
+
+      .kbd {
+        border: 1px solid currentColor;
+        border-radius: 4px;
+        padding: 3px 6px;
+        font-size: 0.72em;
+        line-height: 1;
+        font-weight: 500;
+        opacity: 0.7;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: 6px;
+        font-size: 15px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      .badge.green {
+        background: #d1fae5;
+        color: #065f46;
+      }
+
+      .badge.amber {
+        background: #fef3c7;
+        color: #78350f;
+        box-shadow: inset 0 0 0 1px #fcd34d;
+      }
+
+      .grid10 {
+        display: grid;
+        gap: 2px;
+        font-size: 10px;
+        color: var(--faint);
+        font-weight: 500;
+      }
+
+      .grid10 > div {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .grid10 .cell {
+        aspect-ratio: 1;
+        border-radius: 3px;
+        background: #f1f5f9;
+        color: #fff;
+        font-weight: 700;
+      }
+
+      .tube-chip {
+        border-radius: 12px;
+        padding: 12px;
+      }
+
+      .set-1 {
+        --c: var(--set-1);
+        --c-soft: var(--set-1-soft);
+      }
+
+      .set-2 {
+        --c: var(--set-2);
+        --c-soft: var(--set-2-soft);
+      }
+
+      .set-3 {
+        --c: var(--set-3);
+        --c-soft: var(--set-3-soft);
+      }
+
+      .pending {
+        background: var(--c-soft);
+        color: var(--c);
+        box-shadow: inset 0 0 0 2px var(--c);
+      }
+
+      .solid {
+        background: var(--c);
+        color: #fff;
+      }
+
+      .fill {
+        position: absolute;
+        inset: 0;
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+      }
+
+      .col {
+        display: flex;
+        flex-direction: column;
+      }
+
+      #hud {
+        position: fixed;
+        right: 12px;
+        bottom: 12px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        font: 12px var(--mono);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <script src="icons.js"></script>
+    <script src="narration.js"></script>
+    <script src="explainer.js"></script>
+  </body>
+</html>

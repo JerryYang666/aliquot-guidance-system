@@ -18,11 +18,11 @@ Destination boxes are 10×10, rows A–H, J, K (no I), columns 1–10.
 Work follows the **pull list** of each batch, which is sorted by where the
 source tubes are stored, to save freezer trips. The three roles:
 
-| Role                       | Does                                                                                                                                                                                   | Confirms with                                     |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| **Puller** (operator 1)    | Finds the next source tube in the freezer, hands it to the aliquoter. Later returns aliquoted source tubes to their positions.                                                         | `Space` / `→` = pulled. `Enter` = returned.       |
-| **Labeler** (operator 3)   | At the same time, finds the three printed labels for that sample and sticks them on three empty tubes; hands them to the aliquoter.                                                    | `Space` / `→` = labeled, or scan all three tubes. |
-| **Aliquoter** (operator 2) | Checks the source tube's original ID against the screen, pipettes, then holds each new tube to the phone camera. Each scan confirms that tube and shows which box and slot it goes in. | Data Matrix scan (camera always on).              |
+| Role                       | Does                                                                                                                                                                                                             | Confirms with                                     |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| **Puller** (operator 1)    | Finds the next source tube in the freezer, hands it to the aliquoter. Later returns aliquoted source tubes to their positions.                                                                                   | `Space` / `→` = pulled. `Enter` = returned.       |
+| **Labeler** (operator 3)   | At the same time, finds the three printed labels for that sample and sticks them on three empty tubes; hands them to the aliquoter.                                                                              | `Space` / `→` = labeled, or scan all three tubes. |
+| **Aliquoter** (operator 2) | Checks the source tube's original ID and the new tubes' labels against the screen, pipettes, then holds each new tube to the phone camera. Each scan confirms that tube and shows which box and slot it goes in. | Data Matrix scan (camera always on).              |
 
 The puller and labeler run one sample ahead of the aliquoter. Nobody needs to
 touch the screen during normal flow; buttons exist for exceptions.

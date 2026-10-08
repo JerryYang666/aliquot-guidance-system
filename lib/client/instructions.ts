@@ -52,7 +52,7 @@ export const INSTRUCTIONS: Record<Language, Instructions> = {
       aliquoter: {
         title: "You are the Aliquoter",
         steps: [
-          "Take the source tube from the Puller. Check that the ID on it matches the big number on your screen.",
+          "Take the source tube from the Puller. Check that the ID on it matches the big number on your screen, and that the labels on the three new tubes match the “New ID” below it.",
           "Aliquot it into its three labeled tubes.",
           "Tap “Start camera”, then scan each of the three tubes. After each scan, the screen shows which box and slot that tube goes in.",
           "After the third scan, the screen moves to the next tube. Hand the source tube back to the Puller.",
@@ -96,7 +96,7 @@ export const INSTRUCTIONS: Record<Language, Instructions> = {
       aliquoter: {
         title: "你是分装员（Aliquoter）",
         steps: [
-          "从取管员（Puller）手里接过样本管，核对管上的编号和屏幕上的大号数字是否一致。",
+          "从取管员（Puller）手里接过样本管，核对管上的编号和屏幕上的大号数字是否一致，并核对三支新管的标签和下方的 “New ID” 是否一致。",
           "把样本分装到对应的三支已贴标签的管里。",
           "点 “Start camera”，逐支扫描这三支管。每扫一支，屏幕会显示它该放进哪个盒子的哪个位置。",
           "扫完第三支，屏幕会跳到下一管。把样本管还给取管员。",

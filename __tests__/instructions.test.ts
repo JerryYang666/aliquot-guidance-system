@@ -24,6 +24,7 @@ describe("role instructions", () => {
       expect(puller.steps.join(" ")).toMatch(/Returned/);
       expect(labeler.steps.join(" ")).toMatch(/Start camera/);
       expect(aliquoter.steps.join(" ")).toMatch(/Start camera/);
+      expect(aliquoter.steps.join(" ")).toMatch(/New ID/);
     }
   });
 });
