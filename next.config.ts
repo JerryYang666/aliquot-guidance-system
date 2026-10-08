@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Parsed on the server only; bundling them gains nothing.
-  serverExternalPackages: ["exceljs", "pg"],
+  // The Postgres driver loads optional native bindings; leave it unbundled.
+  serverExternalPackages: ["pg"],
   async headers() {
     return [
       {
