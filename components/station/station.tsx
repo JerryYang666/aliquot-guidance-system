@@ -62,8 +62,9 @@ export function Station({ code }: { code: string }) {
   const perform = useCallback(
     async (action: Action) => {
       const result = await run(action);
-      if (!result.ok && action.type !== "scan")
-        notify(result.error.message, "error");
+      // Scan failures are shown in the station's own result banner.
+      const isScan = action.type === "scan" || action.type === "label_scan";
+      if (!result.ok && !isScan) notify(result.error.message, "error");
       return result;
     },
     [run, notify],

@@ -4,7 +4,8 @@ import { useEffect, useRef } from "react";
 
 /**
  * Station shortcuts (Space, arrows, Enter, letters). Held keys do not
- * repeat, and typing in a form field never triggers them.
+ * repeat, and typing in a form field or a scanner's shifted capitals never
+ * triggers them.
  */
 export function useHotkeys(
   bindings: Record<string, (() => void) | undefined>,
@@ -27,6 +28,9 @@ export function useHotkeys(
         )
       )
         return;
+      // A barcode scanner types labels like "S0066-1" with Shift held for
+      // capitals; letter shortcuts are plain keys, so shifted ones are text.
+      if (e.shiftKey && e.key.length === 1 && e.key !== " ") return;
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       const handler = ref.current[key];
       if (!handler) return;

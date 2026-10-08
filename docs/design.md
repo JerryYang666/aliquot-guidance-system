@@ -18,11 +18,11 @@ Destination boxes are 10×10, rows A–H, J, K (no I), columns 1–10.
 Work follows the **pull list** of each batch, which is sorted by where the
 source tubes are stored, to save freezer trips. The three roles:
 
-| Role                       | Does                                                                                                                                                                                   | Confirms with                               |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| **Puller** (operator 1)    | Finds the next source tube in the freezer, hands it to the aliquoter. Later returns aliquoted source tubes to their positions.                                                         | `Space` / `→` = pulled. `Enter` = returned. |
-| **Labeler** (operator 3)   | At the same time, finds the three printed labels for that sample and sticks them on three empty tubes; hands them to the aliquoter.                                                    | `Space` / `→` = labeled.                    |
-| **Aliquoter** (operator 2) | Checks the source tube's original ID against the screen, pipettes, then holds each new tube to the phone camera. Each scan confirms that tube and shows which box and slot it goes in. | Data Matrix scan (camera always on).        |
+| Role                       | Does                                                                                                                                                                                   | Confirms with                                     |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| **Puller** (operator 1)    | Finds the next source tube in the freezer, hands it to the aliquoter. Later returns aliquoted source tubes to their positions.                                                         | `Space` / `→` = pulled. `Enter` = returned.       |
+| **Labeler** (operator 3)   | At the same time, finds the three printed labels for that sample and sticks them on three empty tubes; hands them to the aliquoter.                                                    | `Space` / `→` = labeled, or scan all three tubes. |
+| **Aliquoter** (operator 2) | Checks the source tube's original ID against the screen, pipettes, then holds each new tube to the phone camera. Each scan confirms that tube and shows which box and slot it goes in. | Data Matrix scan (camera always on).              |
 
 The puller and labeler run one sample ahead of the aliquoter. Nobody needs to
 touch the screen during normal flow; buttons exist for exceptions.
@@ -83,6 +83,25 @@ instantly; the server's answer (normally within a few hundred ms) confirms or
 overturns it. Identical decodes are debounced for 2.5 s so a tube held in
 front of the camera is not logged repeatedly.
 
+### Labeler scans (optional)
+
+The labeler can confirm with `Space` as before, or scan each freshly labeled
+tube (camera, a USB scanner, or by typing). Each scan is checked against the
+sample on the labeler's screen and stored on the tube (`labelScannedAt` /
+`labelScannedBy` in its JSON), so a reload keeps the progress:
+
+| Situation                                                     | Result                                                                                                                                                |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Label of the sample on screen                                 | **Recorded**; the tube shows as scanned. The last of the sample's labels marks it labeled (as `Space` would) and the screen moves to the next sample. |
+| Label already scanned                                         | Shown as a repeat (logged).                                                                                                                           |
+| Label of another sample, while the one on screen is unlabeled | **Rejected** — red, error tone, names the expected sample. Logged.                                                                                    |
+| Unreadable, unknown, wrong tube number, another batch         | **Rejected** and logged, by the same checks as the aliquoter's scans.                                                                                 |
+
+Scanning is never required: a sample is labeled by `Space` or by its last
+scan, whichever comes first. Undoing a sample's labels clears its scans.
+Letter shortcuts ignore Shift, so a scanner typing `S0066-1` does not trigger
+`S` (skip).
+
 ### Low-volume tubes
 
 Volume notes from the workbook (`Low`, `Very low`, …) appear as a warning badge
@@ -133,7 +152,8 @@ outcome instead of acting twice, so flaky phone connections can't
 double-log.
 
 Logged event types: `job_created`, `participant_joined`, `participant_left`,
-`sample_pulled`, `sample_labeled`, `sample_skipped`, `tube_placed`,
+`sample_pulled`, `sample_labeled`, `sample_skipped`, `label_scanned`,
+`label_scan_repeated`, `label_scan_rejected`, `tube_placed`,
 `scan_repeated`, `scan_rejected`, `sample_finished`, `sample_returned`,
 `note_added`, and an `*_undone` / `sample_reopened` entry for each reversal.
 

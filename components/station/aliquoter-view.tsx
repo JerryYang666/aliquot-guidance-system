@@ -1,25 +1,20 @@
 "use client";
 
 import {
-  Camera,
   Check,
   CircleSlash,
-  Flashlight,
   Hourglass,
-  Keyboard,
   MessageSquarePlus,
-  ScanLine,
   X,
 } from "lucide-react";
-import { useCallback, useRef, useState, type FormEvent } from "react";
+import { useCallback, useState } from "react";
 
-import { useCameraScanner } from "@/components/scanner/use-camera-scanner";
-import { useKeyboardScanner } from "@/components/scanner/use-keyboard-scanner";
+import { ScannerPanel } from "@/components/scanner/scanner-panel";
 import { signal } from "@/lib/client/feedback";
 import { randomId } from "@/lib/client/ids";
 import { decideScan } from "@/lib/pipeline/actions";
 import { destinationFor } from "@/lib/pipeline/destination";
-import { labelFor, normalizeLabel, parseLabel } from "@/lib/pipeline/labels";
+import { labelFor, parseLabel } from "@/lib/pipeline/labels";
 import {
   isFinished,
   isReady,
@@ -34,8 +29,6 @@ import { Badge, Button, Card, cx, Label, setColor } from "../ui";
 
 import { SampleFlags } from "./common";
 import type { ViewProps } from "./types";
-
-const REPEAT_WINDOW_MS = 2_500;
 
 type ScanView =
   | {
@@ -77,26 +70,15 @@ export function AliquoterView({
   const [result, setResult] = useState<ScanView | null>(null);
   const [dialog, setDialogState] = useState<Dialog>(null);
   const [note, setNote] = useState("");
-  const [manual, setManual] = useState("");
-  const lastScan = useRef<{ label: string; at: number } | null>(null);
 
   const setDialog = (d: Dialog) => {
     setDialogState(d);
     setDialogOpen(d !== null);
   };
 
+  /** Gets each new label once, already normalized (see ScannerPanel). */
   const handleScan = useCallback(
-    async (raw: string) => {
-      const label = normalizeLabel(raw);
-      if (!label) return;
-      const now = Date.now();
-      if (
-        lastScan.current?.label === label &&
-        now - lastScan.current.at < REPEAT_WINDOW_MS
-      )
-        return;
-      lastScan.current = { label, at: now };
-
+    async (label: string) => {
       // Show the outcome at once from local state; the server confirms it.
       const id = randomId();
       let preview: ScanView["kind"] = "checking";
@@ -202,25 +184,6 @@ export function AliquoterView({
     [samples, current, snapshot.batch.number, destSets, boxNumber, perform],
   );
 
-  const {
-    videoRef,
-    state: cameraState,
-    start: startCamera,
-    extras: cameraExtras,
-    torchOn,
-    toggleTorch,
-    zoom,
-    setZoom,
-  } = useCameraScanner(handleScan);
-  useKeyboardScanner(handleScan);
-
-  const submitManual = (e: FormEvent) => {
-    e.preventDefault();
-    lastScan.current = null;
-    void handleScan(manual);
-    setManual("");
-  };
-
   const finish = async () => {
     if (!current) return;
     const r = await perform({
@@ -253,116 +216,15 @@ export function AliquoterView({
   const waitingFor = queueOrder(samples).find(
     (s) => !isFinished(s) && !isReady(s),
   );
-  const scanning = cameraState === "scanning";
 
   return (
     <div className="mx-auto grid max-w-7xl gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-[420px_1fr]">
-      <div className="flex flex-col gap-3">
-        <div className="relative overflow-hidden rounded-2xl bg-slate-950">
-          <video
-            ref={videoRef}
-            muted
-            playsInline
-            autoPlay
-            className={cx(
-              "aspect-[4/3] max-h-[34dvh] w-full object-cover lg:max-h-none",
-              !scanning && "opacity-0",
-            )}
-          />
-          {scanning && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="aspect-square h-[70%] rounded-xl border-2 border-dashed border-white/70" />
-            </div>
-          )}
-          {!scanning && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4 text-center text-white">
-              {cameraState === "starting" ? (
-                <p>Starting camera…</p>
-              ) : (
-                <>
-                  <p className="text-sm text-slate-300">
-                    {cameraState === "denied"
-                      ? "Camera access was refused. Allow it in the browser's site settings, then try again."
-                      : cameraState === "unavailable"
-                        ? "No camera found. Type labels below, or use a USB scanner."
-                        : cameraState === "error"
-                          ? "The camera could not start."
-                          : "Hold each new tube's label in the frame. The camera stays on."}
-                  </p>
-                  <Button
-                    variant="primary"
-                    size="lg"
-                    onClick={() => void startCamera()}
-                  >
-                    <Camera className="size-5" /> Start camera
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
-          {scanning && (
-            <div className="absolute right-2 bottom-2 flex gap-2">
-              {cameraExtras.zoom && cameraExtras.zoom.max >= 2 && (
-                <button
-                  type="button"
-                  className="rounded-full bg-black/60 px-3 py-1.5 text-sm font-semibold text-white"
-                  onClick={() => {
-                    const max = cameraExtras.zoom?.max ?? 1;
-                    const next = zoom >= Math.min(3, max) ? 1 : zoom + 1;
-                    void setZoom(Math.min(next, max));
-                  }}
-                >
-                  {zoom}×
-                </button>
-              )}
-              {cameraExtras.torch && (
-                <button
-                  type="button"
-                  aria-label="Torch"
-                  aria-pressed={torchOn}
-                  className={cx(
-                    "rounded-full p-2",
-                    torchOn
-                      ? "bg-yellow-300 text-black"
-                      : "bg-black/60 text-white",
-                  )}
-                  onClick={() => void toggleTorch()}
-                >
-                  <Flashlight className="size-4" />
-                </button>
-              )}
-            </div>
-          )}
-          {scanning && (
-            <div className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-xs text-white">
-              <ScanLine className="size-3.5" /> Scanning
-            </div>
-          )}
-        </div>
-
+      <ScannerPanel
+        onLabel={(label) => void handleScan(label)}
+        idleText="Hold each new tube's label in the frame. The camera stays on."
+      >
         <ScanResult result={result} layout={snapshot.layouts.dest} />
-
-        <form onSubmit={submitManual} className="flex gap-2">
-          <label className="sr-only" htmlFor="manual-label">
-            Type a label
-          </label>
-          <div className="relative flex-1">
-            <Keyboard className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
-            <input
-              id="manual-label"
-              value={manual}
-              onChange={(e) => setManual(e.target.value)}
-              placeholder="Type a label, e.g. S0066-1"
-              autoCapitalize="characters"
-              autoComplete="off"
-              className="h-10 w-full rounded-lg bg-white pr-3 pl-9 font-mono ring-1 ring-slate-300"
-            />
-          </div>
-          <Button type="submit" disabled={!manual.trim()}>
-            Enter
-          </Button>
-        </form>
-      </div>
+      </ScannerPanel>
 
       <div className="flex flex-col gap-3">
         {current ? (

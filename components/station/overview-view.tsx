@@ -289,6 +289,14 @@ function SampleDetails({
             >
               <span className={cx("font-medium", setColor(i + 1).text)}>
                 {labelFor(s.newId, i + 1)} → {destSets[i]} box {boxNumber}
+                {t.labelScannedAt && (
+                  <span
+                    className="ml-2 text-xs font-normal text-slate-500"
+                    title={`Label scanned ${formatTime(t.labelScannedAt, true)} by ${t.labelScannedBy ?? ""}`}
+                  >
+                    label ✓
+                  </span>
+                )}
               </span>
               <span className="flex items-center gap-2">
                 <span
